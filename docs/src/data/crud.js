@@ -5,29 +5,54 @@ export class CRUDManager {
     }
     
     saveCard(cardData) {
-        // Gérer l'upload des images si des fichiers ont été sélectionnés
-        const processImageUpload = async (imageFile, imageType) => {
-            if (!imageFile) return cardData[imageType === 'question' ? 'questionImage' : 'answerImage'];
-            
-            // Ici vous devrez implémenter l'upload vers GitHub
-            // Pour l'instant, on retourne juste le nom du fichier
-            return imageFile.name;
+        const readFileAsDataURL = (file) => new Promise((resolve, reject) => {
+            if (!file) {
+                resolve(null);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+        });
+
+        const processImageUpload = async ({ file, inlineData, fallback }) => {
+            if (inlineData) {
+                return inlineData;
+            }
+            if (file) {
+                try {
+                    return await readFileAsDataURL(file);
+                } catch (error) {
+                    console.warn('Impossible de lire le fichier image sélectionné', error);
+                }
+            }
+            return fallback || '';
         };
-        
-        // Traiter les images de façon asynchrone
-        Promise.all([
-            processImageUpload(this.app.currentQuestionImageFile, 'question'),
-            processImageUpload(this.app.currentAnswerImageFile, 'answer')
-        ]).then(([questionImage, answerImage]) => {
-            // Mettre à jour les chemins d'images avec les noms de fichiers
+
+        const pendingImages = [
+            processImageUpload({
+                file: this.app.currentQuestionImageFile,
+                inlineData: this.app.currentQuestionImageData,
+                fallback: cardData.questionImage
+            }),
+            processImageUpload({
+                file: this.app.currentAnswerImageFile,
+                inlineData: this.app.currentAnswerImageData,
+                fallback: cardData.answerImage
+            })
+        ];
+
+        Promise.all(pendingImages).then(([questionImage, answerImage]) => {
             cardData.questionImage = questionImage;
             cardData.answerImage = answerImage;
-            
-            // Réinitialiser les fichiers
+
             this.app.currentQuestionImageFile = null;
             this.app.currentAnswerImageFile = null;
-            
-            // Continuer avec la sauvegarde normale
+            this.app.currentQuestionImageData = null;
+            this.app.currentAnswerImageData = null;
+
             if (cardData.id) {
                 const index = this.app.flashcards.findIndex(c => c.id == cardData.id);
                 if (index !== -1) {
@@ -58,6 +83,9 @@ export class CRUDManager {
             this.app.saveFlashcards();
             this.app.ui.hideCardEditor();
             this.app.onCardUpdated();
+        }).catch((error) => {
+            console.error('Échec lors du traitement des images de la carte', error);
+            alert('Impossible de charger l\'image sélectionnée. Veuillez réessayer ou choisir un autre fichier.');
         });
     }
     deleteCard(cardId) {
