@@ -1,6 +1,7 @@
 export class CRUDManager {
     init(app) {
         this.app = app;
+        this.storage = app.storage;
     }
     
     saveCard(cardData) {
@@ -28,67 +29,56 @@ export class CRUDManager {
             
             // Continuer avec la sauvegarde normale
             if (cardData.id) {
-                // Modification
                 const index = this.app.flashcards.findIndex(c => c.id == cardData.id);
                 if (index !== -1) {
-                    this.app.flashcards[index] = {
-                        ...this.app.flashcards[index],
+                    const existing = this.app.flashcards[index];
+                    this.app.flashcards[index] = this.app.normaliseCard({
+                        ...existing,
                         question: cardData.question,
                         questionImage: cardData.questionImage,
                         answer: cardData.answer,
                         answerImage: cardData.answerImage
-                    };
+                    });
                 }
             } else {
-                // Nouvelle carte
-                const newId = Date.now(); // ID unique basé sur le timestamp
-                this.app.flashcards.push({
+                const newId = Date.now();
+                const newCard = this.app.normaliseCard({
                     id: newId,
                     question: cardData.question,
                     questionImage: cardData.questionImage,
                     answer: cardData.answer,
                     answerImage: cardData.answerImage,
                     box: 1,
-                    lastReview: Date.now()
+                    lastReview: Date.now(),
+                    difficulty: this.app.userConfig.defaultDifficulty
                 });
+                this.app.flashcards.push(newCard);
             }
-            
+
             this.app.saveFlashcards();
             this.app.ui.hideCardEditor();
-            
-            // Si on était en train de voir une liste, la mettre à jour
-            if (!document.getElementById('cards-list-container').classList.contains('hidden')) {
-                this.app.ui.showCardsList(this.app.currentBoxNumber, this.app.flashcards, this.app.reviewIntervals);
-            }
+            this.app.onCardUpdated();
         });
-    }    
+    }
     deleteCard(cardId) {
         const index = this.app.flashcards.findIndex(c => c.id == cardId);
         if (index !== -1) {
             this.app.flashcards.splice(index, 1);
             this.app.saveFlashcards();
             this.app.ui.hideCardViewer();
-            
-            // Si on était en train de voir une liste, la mettre à jour
-            if (!document.getElementById('cards-list-container').classList.contains('hidden')) {
-                this.app.ui.showCardsList(this.app.currentBoxNumber, this.app.flashcards, this.app.reviewIntervals);
-            }
+            this.app.onCardUpdated();
         }
     }
-    
+
     loadFlashcards(csvName) {
-        const saved = localStorage.getItem(`leitnerFlashcards_${csvName}`);
-        if (saved) {
-            try {
-                this.app.flashcards = JSON.parse(saved);
-                this.app.currentCSV = csvName;
-                this.app.updateBoxes();
-                return true;
-            } catch (e) {
-                console.error('Erreur de chargement des flashcards:', e);
-            }
+        const saved = this.storage.getJSON(`leitnerFlashcards_${csvName}`, null);
+        if (Array.isArray(saved)) {
+            this.app.flashcards = saved.map(card => this.app.normaliseCard(card));
+            this.app.currentCSV = csvName;
+            this.app.updateBoxes();
+            return true;
         }
-        
+
         this.app.flashcards = [];
         return false;
     }
@@ -101,7 +91,7 @@ export class CRUDManager {
             csvList.push(selector.options[i].value);
         }
         
-        localStorage.setItem('leitnerCSVList', JSON.stringify(csvList));
+        this.storage.setJSON('leitnerCSVList', csvList);
     }
     
     exportToCSV() {
