@@ -14,7 +14,10 @@ export class UIManager {
             return;
         }
 
-        if (!boxesContainer.hasChildNodes()) {
+        const existingBoxes = boxesContainer.querySelectorAll('.box');
+        if (existingBoxes.length === 0) {
+            boxesContainer.innerHTML = '';
+
             boxSummaries.forEach(summary => {
                 const box = document.createElement('div');
                 box.className = `box box-border-${summary.box} bg-white rounded-lg shadow-md p-4 text-center cursor-pointer hover:-translate-y-1 transition-transform`;
