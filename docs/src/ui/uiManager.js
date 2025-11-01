@@ -22,12 +22,14 @@ export class UIManager {
                 const box = document.createElement('div');
                 box.className = `box box-border-${summary.box} bg-white rounded-lg shadow-md p-4 text-center cursor-pointer hover:-translate-y-1 transition-transform`;
                 box.dataset.boxNumber = summary.box;
+                box.dataset.dueCount = summary.due ?? 0;
 
                 const colorClass = `text-box${summary.box}`;
 
                 box.innerHTML = `
                     <h2 class="text-xl font-bold mb-2 ${colorClass}">Boîte ${summary.box}</h2>
                     <div class="box-counter text-sm text-gray-600">0 carte(s)</div>
+                    <div class="box-due text-xs text-amber-600 mt-1"></div>
                     <div class="box-next-review text-xs text-gray-400 mt-1"></div>
                 `;
 
@@ -68,10 +70,17 @@ export class UIManager {
             }
 
             const counter = boxElement.querySelector('.box-counter');
+            const dueIndicator = boxElement.querySelector('.box-due');
             const nextReview = boxElement.querySelector('.box-next-review');
 
             boxElement.dataset.boxNumber = summary.box;
+            boxElement.dataset.dueCount = summary.due ?? 0;
             counter.textContent = `${summary.count} carte(s)`;
+            if (dueIndicator) {
+                dueIndicator.textContent = summary.due > 0
+                    ? `${summary.due} prête(s)`
+                    : '';
+            }
             nextReview.textContent = summary.count > 0
                 ? `Prochaine rev.: ${this.formatTime(summary.nextReview)}`
                 : '';
@@ -95,21 +104,20 @@ export class UIManager {
         });
     }
     
-    showCardsList(boxNumber, flashcards) {
+    showCardsList(boxNumber, cards = []) {
         this.app.currentBoxNumber = boxNumber;
-        const boxCards = flashcards.filter(card => card.box === boxNumber);
         const cardsList = document.getElementById('cards-list');
         cardsList.innerHTML = '';
 
-        if (boxCards.length === 0) {
+        if (!Array.isArray(cards) || cards.length === 0) {
             cardsList.innerHTML = '<p class="text-gray-500">Aucune carte</p>';
         } else {
-            boxCards.forEach(card => {
+            cards.forEach(card => {
                 const cardElement = this.createCardElement(card);
                 cardsList.appendChild(cardElement);
             });
         }
-        
+
         document.getElementById('current-box-number').textContent = boxNumber;
         document.getElementById('cards-list-container').classList.remove('hidden');
         
@@ -147,7 +155,7 @@ export class UIManager {
             <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium text-gray-900 truncate">${displayText}</div>
                 <div class="card-next-review text-xs text-gray-500 mt-1">
-                    Rev.: ${this.formatTime(this.app.getCardNextReview(card))}
+                    Rev.: ${this.formatTime(card.nextReview || this.app.getCardNextReview(card))}
                 </div>
             </div>
         `;

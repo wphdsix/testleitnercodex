@@ -69,30 +69,61 @@ export class LeitnerEngine {
         };
     }
 
-    static summariseBoxes(cards, curve, difficulties, now = Date.now()) {
-        const effectiveCurve = curve || LeitnerEngine.DEFAULT_CURVE;
+    static normaliseDeck(cards, options = {}) {
+        const context = resolveEngineContext(options);
+        return (cards || []).map(card =>
+            LeitnerEngine.normaliseCard(card, context)
+        );
+    }
+
+    static summariseBoxes(cards, options = {}) {
+        const context = resolveEngineContext(options);
+        const deck = LeitnerEngine.normaliseDeck(cards, context);
         const summaries = [];
 
-        for (let index = 0; index < effectiveCurve.length; index++) {
+        for (let index = 0; index < context.curve.length; index += 1) {
             const boxNumber = index + 1;
-            const cardsInBox = (cards || []).filter(card => (parseInt(card.box, 10) || 1) === boxNumber);
-
+            const cardsInBox = deck.filter(card => card.box === boxNumber);
             const nextReview = cardsInBox.length > 0
-                ? Math.min(
-                    ...cardsInBox.map(card =>
-                        LeitnerEngine.computeCardNextReview(card, effectiveCurve, difficulties, now)
-                    )
-                )
+                ? Math.min(...cardsInBox.map(card => card.nextReview))
                 : null;
+            const dueCount = cardsInBox.filter(card => card.nextReview <= context.now).length;
 
             summaries.push({
                 box: boxNumber,
                 count: cardsInBox.length,
+                due: dueCount,
                 nextReview: Number.isFinite(nextReview) ? nextReview : null
             });
         }
 
         return summaries;
+    }
+
+    static getCardsForBox(cards, boxNumber, options = {}) {
+        const context = resolveEngineContext(options);
+        const normalisedBox = Math.max(1, Math.min(context.curve.length, parseInt(boxNumber, 10) || 1));
+        const deck = LeitnerEngine.normaliseDeck(cards, context);
+
+        return deck
+            .filter(card => card.box === normalisedBox)
+            .sort((a, b) => a.nextReview - b.nextReview);
+    }
+
+    static selectNextCard(cards, options = {}) {
+        const context = resolveEngineContext(options);
+        const deck = LeitnerEngine.normaliseDeck(cards, context);
+
+        if (deck.length === 0) {
+            return null;
+        }
+
+        const dueCards = deck.filter(card => card.nextReview <= context.now);
+        const ordered = (dueCards.length > 0 ? dueCards : deck)
+            .slice()
+            .sort((a, b) => a.nextReview - b.nextReview);
+
+        return ordered[0] || null;
     }
 
     static normaliseCard(card, { curve, difficulties, defaultDifficulty = 'normal', now = Date.now() } = {}) {
@@ -140,4 +171,44 @@ export class LeitnerEngine {
 
         return fallback;
     }
+}
+
+function resolveEngineContext(options = {}) {
+    if (!options || typeof options !== 'object') {
+        return {
+            curve: [...LeitnerEngine.DEFAULT_CURVE],
+            difficulties: { ...LeitnerEngine.DEFAULT_DIFFICULTIES },
+            defaultDifficulty: 'normal',
+            now: Date.now()
+        };
+    }
+
+    const {
+        curve = LeitnerEngine.DEFAULT_CURVE,
+        difficulties = LeitnerEngine.DEFAULT_DIFFICULTIES,
+        defaultDifficulty = 'normal',
+        now = Date.now()
+    } = options;
+
+    const resolvedCurve = Array.isArray(curve) && curve.length > 0
+        ? curve.map(value => (Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : 1))
+        : [...LeitnerEngine.DEFAULT_CURVE];
+
+    const resolvedDifficulties = {
+        ...LeitnerEngine.DEFAULT_DIFFICULTIES,
+        ...(difficulties && typeof difficulties === 'object' ? difficulties : {})
+    };
+
+    const resolvedDefaultDifficulty = typeof defaultDifficulty === 'string' && defaultDifficulty.trim()
+        ? defaultDifficulty.trim().toLowerCase()
+        : 'normal';
+
+    const resolvedNow = Number.isFinite(now) ? Number(now) : Date.now();
+
+    return {
+        curve: resolvedCurve,
+        difficulties: resolvedDifficulties,
+        defaultDifficulty: resolvedDefaultDifficulty,
+        now: resolvedNow
+    };
 }
