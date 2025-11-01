@@ -1,5 +1,9 @@
 import { LeitnerApp } from './core/leitnerApp.js';
 import { TabRouter } from './ui/tabRouter.js';
+import { KeyboardManager } from './ui/keyboardManager.js';
+import { TabbedNavigation } from './ui/components/tabbedNavigation.js';
+import { StatisticsDashboard } from './ui/components/statisticsDashboard.js';
+import { CSVInlineEditor } from './ui/components/csvInlineEditor.js';
 
 /**
  * Bootstrap file responsible for wiring UI navigation and the Leitner app.
@@ -9,10 +13,40 @@ import { TabRouter } from './ui/tabRouter.js';
  * @returns {void}
  */
 function bootstrap() {
-    const tabRouter = new TabRouter({ defaultTab: 'review' });
-    tabRouter.init();
+    const keyboardManager = new KeyboardManager();
+    keyboardManager.init();
 
-    window.leitnerApp = new LeitnerApp({ tabRouter });
+    const tabRouter = new TabRouter({ defaultTab: 'review' });
+    const tablist = document.querySelector('.tab-nav');
+    const tabNavigation = new TabbedNavigation({
+        tablist,
+        router: tabRouter,
+        keyboardManager
+    });
+    tabNavigation.init();
+
+    const app = new LeitnerApp({ tabRouter, keyboardManager });
+    window.leitnerApp = app;
+
+    const csvContainer = document.getElementById('csv-inline-editor');
+    if (csvContainer) {
+        const csvEditor = new CSVInlineEditor({
+            container: csvContainer,
+            keyboardManager
+        });
+        csvEditor.init();
+        csvEditor.bindToApp(app);
+    }
+
+    const statsContainer = document.querySelector('[data-component="statistics-dashboard"]');
+    if (statsContainer) {
+        const dashboard = new StatisticsDashboard({
+            container: statsContainer,
+            historyService: app.history,
+            keyboardManager
+        });
+        dashboard.init();
+    }
 }
 
 document.addEventListener('DOMContentLoaded', bootstrap);

@@ -28,6 +28,8 @@ export class LeitnerApp {
         this.storage = new StorageService();
         this.history = new HistoryService(this.storage);
 
+        this.keyboardManager = options.keyboardManager || null;
+
         this.tabRouter = options.tabRouter || null;
 
         this.flashcards = [];
@@ -66,6 +68,14 @@ export class LeitnerApp {
             window.addEventListener('beforeunload', () => {
                 this.history.endSession({ reason: 'page-unload' });
             });
+        }
+
+        this.emit('leitner:app-ready', { flashcards: this.flashcards });
+    }
+
+    emit(eventName, detail = {}) {
+        if (typeof window !== 'undefined' && window.dispatchEvent) {
+            window.dispatchEvent(new CustomEvent(eventName, { detail }));
         }
     }
 
@@ -273,12 +283,15 @@ export class LeitnerApp {
     }
 
     saveFlashcards() {
+        const normalized = this.flashcards.map(card => this.normaliseCard(card));
+        this.flashcards = normalized;
+
         if (this.currentCSV && this.currentCSV !== 'default') {
-            const normalized = this.flashcards.map(card => this.normaliseCard(card));
-            this.flashcards = normalized;
             this.storage.setJSON(`leitnerFlashcards_${this.currentCSV}`, normalized);
-            this.refreshBoxes();
         }
+
+        this.refreshBoxes();
+        this.emit('leitner:cards-updated', { cards: this.flashcards, csv: this.currentCSV });
     }
 
     processAnswer(isCorrect) {
@@ -324,6 +337,7 @@ export class LeitnerApp {
         if (!document.getElementById('cards-list-container').classList.contains('hidden')) {
             this.ui.showCardsList(this.currentBoxNumber, this.flashcards);
         }
+        this.emit('leitner:cards-updated', { cards: this.flashcards, csv: this.currentCSV });
     }
 
     resetAllData() {
@@ -341,6 +355,7 @@ export class LeitnerApp {
             this.history.startSession({ mode: 'review' });
 
             alert('Toutes les données ont été réinitialisées.');
+            this.emit('leitner:cards-updated', { cards: this.flashcards, csv: this.currentCSV });
         }
     }
 
@@ -374,11 +389,17 @@ export class LeitnerApp {
 
     bindEvents() {
         document.getElementById('admin-button').addEventListener('click', () => {
-            document.getElementById('admin-panel').classList.remove('hidden');
+            const panel = document.getElementById('admin-panel');
+            panel.classList.remove('hidden');
+            panel.setAttribute('aria-hidden', 'false');
+            panel.focus();
         });
 
         document.getElementById('close-admin').addEventListener('click', () => {
-            document.getElementById('admin-panel').classList.add('hidden');
+            const panel = document.getElementById('admin-panel');
+            panel.classList.add('hidden');
+            panel.setAttribute('aria-hidden', 'true');
+            document.getElementById('admin-button').focus();
         });
 
         document.getElementById('save-intervals').addEventListener('click', () => {
