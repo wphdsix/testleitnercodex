@@ -94,8 +94,8 @@
                 </div>
 
                 <!-- Éditeur de carte -->
-                <div id="card-editor" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50">
-                    <div class="bg-white rounded-xl shadow-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+                <div id="card-editor" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="editor-title" aria-hidden="true">
+                    <div class="bg-white rounded-xl shadow-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto" tabindex="-1">
                         <h3 class="text-xl font-bold mb-4" id="editor-title">Nouvelle carte</h3>
                         <form id="card-form" class="space-y-4">
                             <input type="hidden" id="card-id">
@@ -138,8 +138,8 @@
                 </div>
 
                 <!-- Visualisateur de carte -->
-                <div id="flashcard-container" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50">
-                    <div class="flashcard bg-white rounded-xl shadow-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+                <div id="flashcard-container" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="question-content" aria-hidden="true">
+                    <div class="flashcard bg-white rounded-xl shadow-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto" tabindex="-1">
                         <div class="question-section bg-gray-50 rounded-lg p-4 mb-5">
                             <h3 class="font-bold text-lg mb-3">Question</h3>
                             <div id="question-content" class="text-lg my-4"></div>
@@ -187,10 +187,10 @@
                 </div>
 
                 <!-- Panel Admin -->
-                <div id="admin-panel" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50">
+                <div id="admin-panel" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="admin-panel-title" aria-hidden="true" tabindex="-1">
                     <div class="bg-white rounded-xl shadow-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
                         <div class="flex justify-between items-center mb-4">
-                            <h3 class="text-xl font-bold">Paramètres Administrateur</h3>
+                            <h3 class="text-xl font-bold" id="admin-panel-title">Paramètres Administrateur</h3>
                             <button id="close-admin" class="text-gray-500 hover:text-gray-700 text-xl">
                                 ✕
                             </button>
@@ -314,15 +314,17 @@
 
             <section id="tab-stats" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-stats-trigger" data-tab-panel="stats">
                 <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-xl font-bold mb-2">Statistiques</h2>
-                    <p class="text-gray-600">Les visualisations et indicateurs de progression seront ajoutés dans une itération ultérieure.</p>
+                    <h2 class="text-2xl font-bold mb-4">Tableau de bord des statistiques</h2>
+                    <p class="text-gray-600 mb-6">Analysez vos sessions de révision, suivez votre progression et identifiez vos tendances d'apprentissage.</p>
+                    <div data-component="statistics-dashboard" class="statistics-dashboard__container"></div>
                 </div>
             </section>
 
             <section id="tab-import" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-import-trigger" data-tab-panel="import">
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-xl font-bold mb-2">Import / Export avancé</h2>
-                    <p class="text-gray-600">Cette section centralisera prochainement l'import multiple, les templates de fichiers et les exports JSON/PDF.</p>
+                <div class="bg-white rounded-lg shadow-md p-6 space-y-4">
+                    <h2 class="text-2xl font-bold">Import / Export avancé</h2>
+                    <p class="text-gray-600">Utilisez l'éditeur inline pour réaliser des corrections rapides, préparer un import ou exporter vos modifications.</p>
+                    <div id="csv-inline-editor" class="csv-inline-editor__wrapper" aria-live="polite"></div>
                 </div>
             </section>
         </div>
