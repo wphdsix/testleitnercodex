@@ -80,6 +80,8 @@ export class FilterableTable {
         const empty = document.createElement('div');
         empty.className = 'filterable-table__empty';
         empty.textContent = this.emptyMessage;
+        empty.setAttribute('role', 'status');
+        empty.setAttribute('aria-live', 'polite');
 
         this.container.append(toolbar, table, empty);
 

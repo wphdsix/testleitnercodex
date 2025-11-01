@@ -47,10 +47,12 @@ export class TabbedNavigation {
         this.tabs.forEach((tabButton, index) => {
             const targetId = tabButton.dataset.tabTarget;
             const panel = document.querySelector(`[data-tab-panel="${targetId}"]`);
+            const tabId = tabButton.id || `${targetId}-tab`;
 
             tabButton.setAttribute('role', 'tab');
             tabButton.setAttribute('aria-selected', 'false');
             tabButton.setAttribute('tabindex', index === 0 ? '0' : '-1');
+            tabButton.id = tabId;
             tabButton.setAttribute('aria-controls', panel ? panel.id || `${targetId}-panel` : '');
             tabButton.addEventListener('keydown', this.handleKeydown);
 
@@ -58,7 +60,7 @@ export class TabbedNavigation {
                 panel.id = panel.id || `${targetId}-panel`;
                 panel.setAttribute('role', 'tabpanel');
                 panel.setAttribute('tabindex', '0');
-                panel.setAttribute('aria-labelledby', tabButton.id || `${targetId}-tab`);
+                panel.setAttribute('aria-labelledby', tabId);
             }
         });
     }
