@@ -52,7 +52,9 @@ export class GitHubManager {
             
             // Sauvegarder la liste pour une utilisation hors ligne
             const csvList = this.csvFiles.map(file => file.name);
-            localStorage.setItem('leitnerCSVList', JSON.stringify(csvList));
+            if (typeof window !== 'undefined' && window.localStorage) {
+                window.localStorage.setItem('leitnerCSVList', JSON.stringify(csvList));
+            }
             
             return this.csvFiles;
         } catch (error) {

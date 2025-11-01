@@ -1,6 +1,23 @@
 import { GitHubManager } from '../data/github.js';
 import { UIManager } from '../ui/uiManager.js';
 import { CRUDManager } from '../data/crud.js';
+import { LeitnerEngine } from './leitnerEngine.js';
+import { HistoryService } from './historyService.js';
+import { StorageService } from '../data/storageService.js';
+
+const USER_CONFIG_KEY = 'leitnerUserConfig';
+const DEFAULT_USER_CONFIG = {
+    curves: {
+        standard: [...LeitnerEngine.DEFAULT_CURVE]
+    },
+    defaultCurve: 'standard',
+    difficulties: {
+        easy: LeitnerEngine.DEFAULT_DIFFICULTIES.easy,
+        normal: LeitnerEngine.DEFAULT_DIFFICULTIES.normal,
+        hard: LeitnerEngine.DEFAULT_DIFFICULTIES.hard
+    },
+    defaultDifficulty: 'normal'
+};
 
 export class LeitnerApp {
     constructor(options = {}) {
@@ -8,65 +25,70 @@ export class LeitnerApp {
         this.ui = new UIManager();
         this.crud = new CRUDManager();
 
-        /**
-         * Tab router instance enabling navigation between application sections.
-         * Stored for future interactions (e.g. forcing the review tab to open after
-         * specific actions). Phase 1 only keeps a reference without additional logic
-         * to avoid side effects on existing behaviour.
-         */
+        this.storage = new StorageService();
+        this.history = new HistoryService(this.storage);
+
         this.tabRouter = options.tabRouter || null;
 
         this.flashcards = [];
         this.currentCSV = 'default';
         this.currentCard = null;
         this.currentBoxNumber = 1;
-        this.reviewIntervals = [1, 3, 9, 27, 81]; // Intervalles par défaut en heures
+        this.currentDifficulty = null;
+
+        this.reviewIntervals = [...LeitnerEngine.DEFAULT_CURVE];
+        this.userConfig = { ...DEFAULT_USER_CONFIG };
 
         this.currentQuestionImageFile = null;
-        this.currentAnswerImageFile = null;        
+        this.currentAnswerImageFile = null;
+
+        this.handleBoxSelection = this.handleBoxSelection.bind(this);
 
         this.init();
     }
-    
+
     async init() {
         this.loadConfig();
-        this.loadIntervals();
+        this.userConfig = this.loadUserConfig();
+        this.reviewIntervals = [...this.getActiveCurve()];
+
         this.ui.init(this);
         this.crud.init(this);
-        
-        // Charger automatiquement les fichiers CSV au démarrage
+        this.ui.applyUserConfig(this.userConfig);
+
         await this.loadCSVFromGitHub();
-        
-        this.createBoxes();
+        this.refreshBoxes();
         this.bindEvents();
+
+        this.history.startSession({ mode: 'review' });
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('beforeunload', () => {
+                this.history.endSession({ reason: 'page-unload' });
+            });
+        }
     }
-    
+
     loadConfig() {
-        // Valeurs par défaut
         const defaultConfig = {
             repoOwner: 'leitexper1',
             repoName: 'leitexp',
             repoPath: 'docs/',
             githubToken: ''
         };
-        
-        // Charger la configuration sauvegardée ou utiliser les valeurs par défaut
-        const savedConfig = JSON.parse(localStorage.getItem('leitnerConfig') || '{}');
-        const config = {...defaultConfig, ...savedConfig};
-        
-        // Remplir les champs du formulaire
+
+        const savedConfig = this.storage.getJSON('leitnerConfig', {});
+        const config = { ...defaultConfig, ...savedConfig };
+
         document.getElementById('repo-owner').value = config.repoOwner;
         document.getElementById('repo-name').value = config.repoName;
         document.getElementById('repo-path').value = config.repoPath;
         document.getElementById('github-token').value = config.githubToken;
-        
-        // Sauvegarder la configuration complète
-        localStorage.setItem('leitnerConfig', JSON.stringify(config));
-        
-        // Configurer le gestionnaire GitHub
+
+        this.storage.setJSON('leitnerConfig', config);
         this.github.setConfig(config);
     }
-    
+
     saveConfig() {
         const config = {
             repoOwner: document.getElementById('repo-owner').value || 'leitexper1',
@@ -74,42 +96,97 @@ export class LeitnerApp {
             repoPath: document.getElementById('repo-path').value || 'docs/',
             githubToken: document.getElementById('github-token').value || ''
         };
-        
-        localStorage.setItem('leitnerConfig', JSON.stringify(config));
+
+        this.storage.setJSON('leitnerConfig', config);
         this.github.setConfig(config);
     }
-    
-    loadIntervals() {
-        const savedIntervals = JSON.parse(localStorage.getItem('leitnerIntervals'));
-        if (savedIntervals && savedIntervals.length === 5) {
-            this.reviewIntervals = savedIntervals;
+
+    loadUserConfig() {
+        const stored = this.storage.getJSON(USER_CONFIG_KEY, {});
+        const merged = {
+            ...DEFAULT_USER_CONFIG,
+            ...stored,
+            curves: {
+                ...DEFAULT_USER_CONFIG.curves,
+                ...(stored.curves || {})
+            },
+            difficulties: {
+                ...DEFAULT_USER_CONFIG.difficulties,
+                ...(stored.difficulties || {})
+            }
+        };
+
+        const legacyIntervals = this.storage.getJSON('leitnerIntervals', null);
+        if (Array.isArray(legacyIntervals) && legacyIntervals.length === DEFAULT_USER_CONFIG.curves.standard.length) {
+            merged.curves[merged.defaultCurve] = legacyIntervals;
         }
-        
-        // Mettre à jour les champs de formulaire
-        for (let i = 1; i <= 5; i++) {
-            document.getElementById(`interval-${i}`).value = this.reviewIntervals[i-1];
-        }
+
+        this.storage.setJSON(USER_CONFIG_KEY, merged);
+        return merged;
     }
-    
+
+    persistUserConfig() {
+        this.storage.setJSON(USER_CONFIG_KEY, this.userConfig);
+    }
+
+    getActiveCurve() {
+        const curve = this.userConfig?.curves?.[this.userConfig.defaultCurve];
+        return Array.isArray(curve) ? [...curve] : [...LeitnerEngine.DEFAULT_CURVE];
+    }
+
+    loadIntervals() {
+        this.reviewIntervals = [...this.getActiveCurve()];
+        this.ui.applyUserConfig(this.userConfig);
+    }
+
     saveIntervals() {
+        const intervalCount = this.getActiveCurve().length;
         const newIntervals = [];
-        for (let i = 1; i <= 5; i++) {
-            const value = parseInt(document.getElementById(`interval-${i}`).value) || 1;
-            newIntervals.push(value);
+        for (let i = 1; i <= intervalCount; i++) {
+            const value = parseInt(document.getElementById(`interval-${i}`).value, 10);
+            newIntervals.push(Number.isFinite(value) && value > 0 ? value : 1);
         }
-        
+
         this.reviewIntervals = newIntervals;
-        localStorage.setItem('leitnerIntervals', JSON.stringify(this.reviewIntervals));
-        this.updateBoxes();
+        this.userConfig.curves[this.userConfig.defaultCurve] = [...newIntervals];
+        this.persistUserConfig();
+        this.storage.setJSON('leitnerIntervals', newIntervals);
+
+        this.refreshBoxes();
         alert('Intervalles sauvegardés avec succès!');
     }
-    
+
+    saveDifficulties() {
+        const easy = parseFloat(document.getElementById('difficulty-easy').value) || LeitnerEngine.DEFAULT_DIFFICULTIES.easy;
+        const normal = parseFloat(document.getElementById('difficulty-normal').value) || LeitnerEngine.DEFAULT_DIFFICULTIES.normal;
+        const hard = parseFloat(document.getElementById('difficulty-hard').value) || LeitnerEngine.DEFAULT_DIFFICULTIES.hard;
+        const defaultDifficulty = document.getElementById('default-difficulty').value || 'normal';
+
+        this.userConfig.difficulties = {
+            easy: Math.max(0.1, easy),
+            normal: Math.max(0.1, normal),
+            hard: Math.max(0.1, hard)
+        };
+        this.userConfig.defaultDifficulty = defaultDifficulty;
+
+        this.persistUserConfig();
+        this.ui.applyUserConfig(this.userConfig);
+
+        alert('Difficultés mises à jour avec succès!');
+    }
+
+    onDifficultyChanged(value) {
+        this.currentDifficulty = value;
+    }
+
     async loadCSVFromGitHub() {
         try {
             await this.github.loadCSVList();
             this.ui.populateCSVSelector(this.github.csvFiles);
-            
-            // Si des fichiers CSV sont disponibles, charger le premier automatiquement
+
+            const csvNames = this.github.csvFiles.map(file => file.name);
+            this.storage.setJSON('leitnerCSVList', csvNames);
+
             if (this.github.csvFiles.length > 0) {
                 const firstCSV = this.github.csvFiles[0];
                 await this.loadCSVFromURL(firstCSV.download_url, firstCSV.name);
@@ -118,7 +195,7 @@ export class LeitnerApp {
             console.error('Erreur de chargement depuis GitHub:', error);
         }
     }
-    
+
     async loadCSVFromURL(url, csvName) {
         try {
             const csvContent = await this.github.loadCSVContent(url);
@@ -128,12 +205,11 @@ export class LeitnerApp {
             alert('Erreur de chargement: ' + error.message);
         }
     }
-    
+
     parseAndLoadCSV(csvContent, csvName) {
         const importedCards = this.github.parseCSV(csvContent);
-        
+
         if (importedCards.length > 0) {
-            // Corriger les URLs des images
             importedCards.forEach(card => {
                 if (card.questionImage) {
                     card.questionImage = this.github.getImageUrl(card.questionImage, 'question');
@@ -142,170 +218,149 @@ export class LeitnerApp {
                     card.answerImage = this.github.getImageUrl(card.answerImage, 'answer');
                 }
             });
-            
-            this.flashcards = importedCards;
+
+            this.flashcards = importedCards.map(card => this.normaliseCard({
+                ...card,
+                id: card.id || Math.floor(Date.now() + Math.random() * 1000),
+                box: card.box || 1,
+                lastReview: card.lastReview || Date.now(),
+                difficulty: card.difficulty || this.userConfig.defaultDifficulty
+            }));
             this.currentCSV = csvName;
             this.saveFlashcards();
-            this.updateBoxes();
-            
-            // Afficher un message de confirmation
+
             alert(`${importedCards.length} cartes chargées depuis ${csvName}`);
         } else {
             alert('Aucune carte valide trouvée dans le fichier CSV');
         }
     }
-    
-    createBoxes() {
-        const boxesContainer = document.getElementById('leitner-boxes');
-        if (!boxesContainer) {
-            console.warn('Leitner boxes container not found in DOM.');
-            return;
-        }
-        boxesContainer.innerHTML = '';
 
-        for (let i = 1; i <= 5; i++) {
-            const box = document.createElement('div');
-            box.className = `box box-border-${i} bg-white rounded-lg shadow-md p-4 text-center cursor-pointer hover:-translate-y-1 transition-transform`;
-            box.dataset.boxNumber = i;
-            
-            const colorClass = `text-box${i}`;
-            
-            box.innerHTML = `
-                <h2 class="text-xl font-bold mb-2 ${colorClass}">Boîte ${i}</h2>
-                <div class="box-counter text-sm text-gray-600">0 carte(s)</div>
-                <div class="box-next-review text-xs text-gray-400 mt-1"></div>
-            `;
-            
-            box.addEventListener('click', () => {
-                this.ui.showCardsList(i, this.flashcards, this.reviewIntervals);
-            });
-            
-            boxesContainer.appendChild(box);
-        }
-        
-        this.updateBoxes();
-    }
-    
-    updateBoxes() {
-        for (let i = 1; i <= 5; i++) {
-            const boxCards = this.flashcards.filter(card => card.box === i);
-            const boxElement = document.querySelector(`.box[data-box-number="${i}"]`);
-            
-            if (boxElement) {
-                const counter = boxElement.querySelector('.box-counter');
-                const nextReview = boxElement.querySelector('.box-next-review');
-                
-                counter.textContent = `${boxCards.length} carte(s)`;
-                
-                if (boxCards.length > 0) {
-                    const nextReviewTime = this.getNextReviewTime(i);
-                    nextReview.textContent = `Prochaine rev.: ${this.formatTime(nextReviewTime)}`;
-                } else {
-                    nextReview.textContent = '';
-                }
-            }
-        }
-    }
-    
-    getNextReviewTime(boxNumber) {
-        const boxCards = this.flashcards.filter(card => card.box === boxNumber);
-        if (boxCards.length === 0) return null;
-        
-        return boxCards.reduce((min, card) => {
-            const cardNextReview = card.lastReview + this.reviewIntervals[card.box - 1] * 3600 * 1000;
-            return Math.min(min, cardNextReview);
-        }, Infinity);
-    }
-    
-    formatTime(timestamp) {
-        if (!timestamp) return '';
-        
-        const now = Date.now();
-        const date = new Date(timestamp);
-        
-        if (timestamp <= now) {
-            return 'Maintenant';
-        }
-        
-        const today = new Date();
-        if (date.getDate() === today.getDate() && 
-            date.getMonth() === today.getMonth() && 
-            date.getFullYear() === today.getFullYear()) {
-            return date.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
-        }
-        
-        return date.toLocaleString('fr-FR', {
-            day: '2-digit',
-            month: '2-digit',
-            hour: '2-digit',
-            minute:'2-digit'
+    refreshBoxes() {
+        const summaries = LeitnerEngine.summariseBoxes(
+            this.flashcards,
+            this.getActiveCurve(),
+            this.userConfig.difficulties
+        );
+
+        this.ui.renderBoxes(summaries, {
+            onSelectBox: this.handleBoxSelection
         });
     }
-    
+
+    updateBoxes() {
+        this.refreshBoxes();
+    }
+
+    handleBoxSelection(boxNumber) {
+        this.ui.showCardsList(boxNumber, this.flashcards);
+    }
+
+    getCardNextReview(card) {
+        return LeitnerEngine.computeCardNextReview(
+            card,
+            this.getActiveCurve(),
+            this.userConfig.difficulties
+        );
+    }
+
+    normaliseCard(card) {
+        return LeitnerEngine.normaliseCard(card, {
+            curve: this.getActiveCurve(),
+            difficulties: this.userConfig.difficulties,
+            defaultDifficulty: this.userConfig.defaultDifficulty,
+            now: Date.now()
+        });
+    }
+
     saveFlashcards() {
         if (this.currentCSV && this.currentCSV !== 'default') {
-            localStorage.setItem(`leitnerFlashcards_${this.currentCSV}`, JSON.stringify(this.flashcards));
-            this.updateBoxes();
+            const normalized = this.flashcards.map(card => this.normaliseCard(card));
+            this.flashcards = normalized;
+            this.storage.setJSON(`leitnerFlashcards_${this.currentCSV}`, normalized);
+            this.refreshBoxes();
         }
     }
-    
+
     processAnswer(isCorrect) {
         if (!this.currentCard) return;
-        
-        this.currentCard.lastReview = Date.now();
-        this.currentCard.box = isCorrect ? Math.min(this.currentCard.box + 1, 5) : 1;
-        
-        // Mettre à jour la carte dans la liste
-        const index = this.flashcards.findIndex(c => c.id === this.currentCard.id);
+
+        const originalCard = this.currentCard;
+        const difficulty = this.currentDifficulty || this.ui.getSelectedDifficulty() || this.userConfig.defaultDifficulty;
+        const updatedCard = LeitnerEngine.evaluateAnswer(originalCard, {
+            isCorrect,
+            difficulty,
+            curve: this.getActiveCurve(),
+            difficulties: this.userConfig.difficulties,
+            now: Date.now()
+        });
+
+        const normalizedCard = this.normaliseCard(updatedCard);
+        const index = this.flashcards.findIndex(c => c.id === normalizedCard.id);
         if (index !== -1) {
-            this.flashcards[index] = this.currentCard;
+            this.flashcards[index] = normalizedCard;
+            this.currentCard = normalizedCard;
         }
-        
+
         this.saveFlashcards();
         this.ui.hideCardViewer();
-        
-        // Si on était en train de voir une liste, la mettre à jour
+
+        this.history.recordReview({
+            cardId: normalizedCard.id,
+            isCorrect,
+            difficulty,
+            fromBox: originalCard.box,
+            toBox: normalizedCard.box,
+            nextReview: normalizedCard.nextReview
+        });
+
         if (!document.getElementById('cards-list-container').classList.contains('hidden')) {
-            this.ui.showCardsList(this.currentBoxNumber, this.flashcards, this.reviewIntervals);
+            this.ui.showCardsList(this.currentBoxNumber, this.flashcards);
+        }
+
+        this.currentDifficulty = null;
+    }
+
+    onCardUpdated() {
+        if (!document.getElementById('cards-list-container').classList.contains('hidden')) {
+            this.ui.showCardsList(this.currentBoxNumber, this.flashcards);
         }
     }
-    
+
     resetAllData() {
         if (confirm('Êtes-vous sûr de vouloir réinitialiser toutes les données? Cette action est irréversible.')) {
-            localStorage.clear();
+            this.storage.clear();
             this.flashcards = [];
             this.currentCSV = 'default';
-            this.reviewIntervals = [1, 3, 9, 27, 81];
+            this.userConfig = this.loadUserConfig();
+            this.reviewIntervals = [...this.getActiveCurve()];
+            this.ui.applyUserConfig(this.userConfig);
             this.loadConfig();
-            this.loadIntervals();
-            this.updateBoxes();
-            
+            this.refreshBoxes();
+
+            this.history.endSession({ reason: 'reset' });
+            this.history.startSession({ mode: 'review' });
+
             alert('Toutes les données ont été réinitialisées.');
         }
     }
-    
+
     exportAllData() {
         const allData = {};
-        
-        // Exporter la configuration
-        allData.config = JSON.parse(localStorage.getItem('leitnerConfig') || '{}');
-        
-        // Exporter les intervalles
-        allData.intervals = JSON.parse(localStorage.getItem('leitnerIntervals') || '[1,3,9,27,81]');
-        
-        // Exporter la liste des CSV
-        allData.csvList = JSON.parse(localStorage.getItem('leitnerCSVList') || '[]');
-        
-        // Exporter tous les jeux de flashcards
+
+        allData.config = this.storage.getJSON('leitnerConfig', {});
+        allData.userConfig = this.storage.getJSON(USER_CONFIG_KEY, DEFAULT_USER_CONFIG);
+        allData.intervals = allData.userConfig.curves?.[allData.userConfig.defaultCurve] || this.reviewIntervals;
+        allData.csvList = this.storage.getJSON('leitnerCSVList', []);
+        allData.history = this.history.getSessions();
+
         allData.flashcards = {};
         allData.csvList.forEach(csv => {
-            const saved = localStorage.getItem(`leitnerFlashcards_${csv}`);
+            const saved = this.storage.getJSON(`leitnerFlashcards_${csv}`, null);
             if (saved) {
-                allData.flashcards[csv] = JSON.parse(saved);
+                allData.flashcards[csv] = saved;
             }
         });
-        
-        // Créer un blob et un lien de téléchargement
+
         const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -316,39 +371,32 @@ export class LeitnerApp {
         link.click();
         document.body.removeChild(link);
     }
-    
+
     bindEvents() {
-        // Bouton Admin
         document.getElementById('admin-button').addEventListener('click', () => {
             document.getElementById('admin-panel').classList.remove('hidden');
         });
-        
-        // Fermer le panel Admin
+
         document.getElementById('close-admin').addEventListener('click', () => {
             document.getElementById('admin-panel').classList.add('hidden');
         });
-        
-        // Sauvegarder les intervalles
+
         document.getElementById('save-intervals').addEventListener('click', () => {
             this.saveIntervals();
         });
-        
-        // Réinitialiser toutes les données
+
         document.getElementById('reset-all').addEventListener('click', () => {
             this.resetAllData();
         });
-        
-        // Exporter toutes les données
+
         document.getElementById('export-all').addEventListener('click', () => {
             this.exportAllData();
         });
-        
-        // Charger les fichiers depuis GitHub
+
         document.getElementById('load-github-csv').addEventListener('click', () => {
             this.loadCSVFromGitHub();
         });
     }
 }
 
-// Bootstrap moved to src/main.js to centralise navigation + app initialisation.
-
+// Bootstrap remains handled in src/main.js.

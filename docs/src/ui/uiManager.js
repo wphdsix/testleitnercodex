@@ -1,7 +1,76 @@
 export class UIManager {
     init(app) {
         this.app = app;
+        this.boxClickHandler = null;
         this.bindEvents();
+    }
+
+    renderBoxes(boxSummaries, { onSelectBox } = {}) {
+        const boxesContainer = document.getElementById('leitner-boxes');
+        if (!boxesContainer) {
+            console.warn('Leitner boxes container not found in DOM.');
+            return;
+        }
+
+        if (!boxesContainer.hasChildNodes()) {
+            boxSummaries.forEach(summary => {
+                const box = document.createElement('div');
+                box.className = `box box-border-${summary.box} bg-white rounded-lg shadow-md p-4 text-center cursor-pointer hover:-translate-y-1 transition-transform`;
+                box.dataset.boxNumber = summary.box;
+
+                const colorClass = `text-box${summary.box}`;
+
+                box.innerHTML = `
+                    <h2 class="text-xl font-bold mb-2 ${colorClass}">Boîte ${summary.box}</h2>
+                    <div class="box-counter text-sm text-gray-600">0 carte(s)</div>
+                    <div class="box-next-review text-xs text-gray-400 mt-1"></div>
+                `;
+
+                box.addEventListener('click', () => {
+                    if (typeof onSelectBox === 'function') {
+                        onSelectBox(summary.box);
+                    }
+                });
+
+                boxesContainer.appendChild(box);
+            });
+
+            this.boxClickHandler = onSelectBox;
+        }
+
+        this.updateBoxSummaries(boxSummaries);
+
+        if (onSelectBox && onSelectBox !== this.boxClickHandler) {
+            this.boxClickHandler = onSelectBox;
+            boxesContainer.querySelectorAll('.box').forEach((element) => {
+                element.replaceWith(element.cloneNode(true));
+            });
+            boxesContainer.querySelectorAll('.box').forEach((element) => {
+                element.addEventListener('click', () => {
+                    if (typeof this.boxClickHandler === 'function') {
+                        this.boxClickHandler(Number(element.dataset.boxNumber));
+                    }
+                });
+            });
+        }
+    }
+
+    updateBoxSummaries(boxSummaries) {
+        boxSummaries.forEach(summary => {
+            const boxElement = document.querySelector(`.box[data-box-number="${summary.box}"]`);
+            if (!boxElement) {
+                return;
+            }
+
+            const counter = boxElement.querySelector('.box-counter');
+            const nextReview = boxElement.querySelector('.box-next-review');
+
+            boxElement.dataset.boxNumber = summary.box;
+            counter.textContent = `${summary.count} carte(s)`;
+            nextReview.textContent = summary.count > 0
+                ? `Prochaine rev.: ${this.formatTime(summary.nextReview)}`
+                : '';
+        });
     }
     
     populateCSVSelector(csvFiles) {
@@ -21,17 +90,17 @@ export class UIManager {
         });
     }
     
-    showCardsList(boxNumber, flashcards, reviewIntervals) {
+    showCardsList(boxNumber, flashcards) {
         this.app.currentBoxNumber = boxNumber;
         const boxCards = flashcards.filter(card => card.box === boxNumber);
         const cardsList = document.getElementById('cards-list');
         cardsList.innerHTML = '';
-        
+
         if (boxCards.length === 0) {
             cardsList.innerHTML = '<p class="text-gray-500">Aucune carte</p>';
         } else {
             boxCards.forEach(card => {
-                const cardElement = this.createCardElement(card, reviewIntervals);
+                const cardElement = this.createCardElement(card);
                 cardsList.appendChild(cardElement);
             });
         }
@@ -49,7 +118,7 @@ export class UIManager {
     }
     
     // Dans ui.js, modifiez la méthode createCardElement
-    createCardElement(card, reviewIntervals) {
+    createCardElement(card) {
         const element = document.createElement('div');
         element.className = 'card-item flex items-start gap-3 p-3 hover:bg-gray-100 rounded-lg cursor-pointer';
         element.dataset.cardId = card.id;
@@ -73,7 +142,7 @@ export class UIManager {
             <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium text-gray-900 truncate">${displayText}</div>
                 <div class="card-next-review text-xs text-gray-500 mt-1">
-                    Rev.: ${this.formatTime(card.lastReview + reviewIntervals[card.box - 1] * 3600 * 1000)}
+                    Rev.: ${this.formatTime(this.app.getCardNextReview(card))}
                 </div>
             </div>
         `;
@@ -125,10 +194,15 @@ export class UIManager {
             imgElement.onerror = "this.style.display='none'";
             document.getElementById('answer-content').appendChild(imgElement);
         }
-        
-        document.getElementById('last-reviewed').textContent = 
+
+        document.getElementById('last-reviewed').textContent =
             `Dernière révision: ${new Date(card.lastReview).toLocaleString('fr-FR')}`;
-        
+
+        const difficultySelect = document.getElementById('answer-difficulty');
+        if (difficultySelect) {
+            difficultySelect.value = card.difficulty || this.app.userConfig.defaultDifficulty || 'normal';
+        }
+
         document.getElementById('answer-section').classList.add('hidden');
         document.getElementById('show-answer-btn').style.display = 'block';
         document.getElementById('flashcard-container').classList.remove('hidden');
@@ -437,7 +511,7 @@ export class UIManager {
                 this.app.currentAnswerImageFile = file;
                 // Afficher seulement le nom du fichier dans le champ
                 document.getElementById('card-answer-image').value = file.name;
-                
+
                 // Prévisualisation temporaire (optionnelle)
                 const reader = new FileReader();
                 reader.onload = (event) => {
@@ -446,7 +520,59 @@ export class UIManager {
                 };
                 reader.readAsDataURL(file);
             }
-        });        
+        });
 
+        const difficultySelect = document.getElementById('answer-difficulty');
+        if (difficultySelect) {
+            difficultySelect.addEventListener('change', () => {
+                this.app.onDifficultyChanged(difficultySelect.value);
+            });
+        }
+
+        const saveDifficultiesButton = document.getElementById('save-difficulties');
+        if (saveDifficultiesButton) {
+            saveDifficultiesButton.addEventListener('click', () => {
+                this.app.saveDifficulties();
+            });
+        }
+    }
+
+    applyUserConfig(config) {
+        const curve = config?.curves?.[config.defaultCurve];
+        if (curve && Array.isArray(curve)) {
+            curve.forEach((value, index) => {
+                const input = document.getElementById(`interval-${index + 1}`);
+                if (input) {
+                    input.value = value;
+                }
+            });
+        }
+
+        const difficultyFields = {
+            easy: document.getElementById('difficulty-easy'),
+            normal: document.getElementById('difficulty-normal'),
+            hard: document.getElementById('difficulty-hard')
+        };
+
+        Object.entries(difficultyFields).forEach(([key, element]) => {
+            if (element && config?.difficulties?.[key] !== undefined) {
+                element.value = config.difficulties[key];
+            }
+        });
+
+        const defaultDifficulty = document.getElementById('default-difficulty');
+        if (defaultDifficulty && config?.defaultDifficulty) {
+            defaultDifficulty.value = config.defaultDifficulty;
+        }
+
+        const answerDifficulty = document.getElementById('answer-difficulty');
+        if (answerDifficulty && config?.defaultDifficulty) {
+            answerDifficulty.value = config.defaultDifficulty;
+        }
+    }
+
+    getSelectedDifficulty() {
+        const select = document.getElementById('answer-difficulty');
+        return select ? select.value : 'normal';
     }
 }

@@ -17,6 +17,12 @@ export class TabRouter {
         this.tabButtons = [];
         this.tabPanels = [];
         this.activeTab = null;
+        this.storage = (typeof window !== 'undefined' && window.localStorage)
+            ? window.localStorage
+            : {
+                getItem: () => null,
+                setItem: () => {}
+            };
     }
 
     /**
@@ -28,7 +34,7 @@ export class TabRouter {
         this.tabButtons = Array.from(document.querySelectorAll('[data-tab-target]'));
         this.tabPanels = Array.from(document.querySelectorAll('[data-tab-panel]'));
 
-        const storedTab = localStorage.getItem(this.storageKey);
+        const storedTab = this.storage.getItem(this.storageKey);
         const initialTab = this.isValidTab(storedTab) ? storedTab : this.defaultTab;
 
         this.tabButtons.forEach((button) => {
@@ -52,7 +58,7 @@ export class TabRouter {
         }
 
         this.activeTab = tabId;
-        localStorage.setItem(this.storageKey, tabId);
+        this.storage.setItem(this.storageKey, tabId);
 
         this.tabButtons.forEach((button) => {
             const isActive = button.dataset.tabTarget === tabId;
