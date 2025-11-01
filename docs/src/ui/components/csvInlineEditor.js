@@ -2,6 +2,67 @@
  * Inline CSV editor rendering a content editable table backed by a textarea to
  * preserve compatibility with copy/paste workflows.
  */
+
+const CSV_FIELDS = [
+    { key: 'question', label: 'Question', header: 'question_content' },
+    { key: 'questionImage', label: 'Image question', header: 'question_content_image' },
+    { key: 'answer', label: 'Réponse', header: 'answer_content' },
+    { key: 'answerImage', label: 'Image réponse', header: 'answer_content_image' },
+    { key: 'box', label: 'Boîte', header: 'box_number' },
+    { key: 'lastReview', label: 'Dernière révision', header: 'last_reviewed' }
+];
+
+function escapeCsvValue(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+
+    const stringValue = String(value);
+    if (stringValue.includes('"') || stringValue.includes(',') || stringValue.includes(';') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+    }
+    return stringValue;
+}
+
+function parseCsvLine(line) {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i += 1) {
+        const char = line[i];
+
+        if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+                current += '"';
+                i += 1;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if ((char === ',' || char === ';') && !inQuotes) {
+            values.push(current);
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+
+    values.push(current);
+    return values.map((value) => value.trim());
+}
+
+function formatLastReview(dateValue) {
+    if (!dateValue) {
+        return '';
+    }
+
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) {
+        return '';
+    }
+
+    return date.toISOString().split('T')[0];
+}
 export class CSVInlineEditor {
     /**
      * @param {Object} options - Component options.
@@ -54,9 +115,7 @@ export class CSVInlineEditor {
                 <table class="csv-inline-editor__table">
                     <thead>
                         <tr>
-                            <th scope="col">Question</th>
-                            <th scope="col">Réponse</th>
-                            <th scope="col">Boîte</th>
+                            ${CSV_FIELDS.map(field => `<th scope="col">${field.label}</th>`).join('')}
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -121,8 +180,11 @@ export class CSVInlineEditor {
         const cards = Array.isArray(this.app.flashcards) ? this.app.flashcards : [];
         this.data = cards.map(card => ({
             question: card.question || '',
+            questionImage: card.questionImage || '',
             answer: card.answer || '',
-            box: card.box || 1
+            answerImage: card.answerImage || '',
+            box: card.box || 1,
+            lastReview: formatLastReview(card.lastReview)
         }));
         this.renderRows();
         this.syncTextarea();
@@ -143,13 +205,37 @@ export class CSVInlineEditor {
             return;
         }
 
-        const rows = text.split(/\r?\n/);
-        this.data = rows.map((row) => {
-            const [question = '', answer = '', box = '1'] = row.split(';');
-            return { question, answer, box: Number(box) || 1 };
+        const rows = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+        if (!rows.length) {
+            this.data = [];
+            this.renderRows();
+            this.setStatus('Zone CSV vide.');
+            return;
+        }
+
+        const headers = parseCsvLine(rows[0]);
+        const hasHeaders = headers.length === CSV_FIELDS.length && CSV_FIELDS.every((field, index) => headers[index] === field.header);
+        const dataRows = hasHeaders ? rows.slice(1) : rows;
+
+        this.data = dataRows.map((row) => {
+            const values = parseCsvLine(row);
+            const mapped = {};
+            CSV_FIELDS.forEach((field, index) => {
+                const rawValue = values[index] ?? '';
+                if (field.key === 'box') {
+                    mapped[field.key] = Number(rawValue) || 1;
+                } else {
+                    mapped[field.key] = rawValue;
+                }
+            });
+            return mapped;
         });
+
         this.renderRows();
-        this.setStatus(`${this.data.length} lignes importées depuis la zone texte.`);
+        const importMessage = hasHeaders
+            ? `${this.data.length} lignes importées (en-têtes reconnus).`
+            : `${this.data.length} lignes importées sans en-têtes.`;
+        this.setStatus(importMessage);
     }
 
     /**
@@ -179,7 +265,14 @@ export class CSVInlineEditor {
      * @returns {void}
      */
     handleAddRow() {
-        this.data.push({ question: '', answer: '', box: 1 });
+        this.data.push({
+            question: '',
+            questionImage: '',
+            answer: '',
+            answerImage: '',
+            box: 1,
+            lastReview: ''
+        });
         this.renderRows();
         this.syncTextarea();
         this.setStatus('Nouvelle ligne ajoutée.');
@@ -191,7 +284,17 @@ export class CSVInlineEditor {
      * @returns {void}
      */
     handleExport() {
-        const content = this.data.map(row => `${row.question};${row.answer};${row.box}`).join('\n');
+        const headerLine = CSV_FIELDS.map(field => field.header).join(',');
+        const contentLines = this.data.map((row) => {
+            const values = CSV_FIELDS.map((field) => {
+                if (field.key === 'box') {
+                    return escapeCsvValue(Number(row[field.key]) || 1);
+                }
+                return escapeCsvValue(row[field.key] ?? '');
+            });
+            return values.join(',');
+        });
+        const content = [headerLine, ...contentLines].join('\n');
         const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
@@ -221,9 +324,17 @@ export class CSVInlineEditor {
             return;
         }
 
-        this.elements.textarea.value = this.data
-            .map(row => `${row.question};${row.answer};${row.box}`)
-            .join('\n');
+        const headerLine = CSV_FIELDS.map(field => field.header).join(',');
+        const dataLines = this.data.map((row) => {
+            const values = CSV_FIELDS.map((field) => {
+                if (field.key === 'box') {
+                    return escapeCsvValue(Number(row[field.key]) || 1);
+                }
+                return escapeCsvValue(row[field.key] ?? '');
+            });
+            return values.join(',');
+        });
+        this.elements.textarea.value = [headerLine, ...dataLines].join('\n');
     }
 
     /**
@@ -242,7 +353,7 @@ export class CSVInlineEditor {
         if (!this.data.length) {
             const emptyRow = document.createElement('tr');
             const cell = document.createElement('td');
-            cell.colSpan = 3;
+            cell.colSpan = CSV_FIELDS.length;
             cell.textContent = 'Aucune donnée. Ajoutez une ligne pour commencer.';
             emptyRow.appendChild(cell);
             body.appendChild(emptyRow);
@@ -251,13 +362,13 @@ export class CSVInlineEditor {
 
         this.data.forEach((row, index) => {
             const tr = document.createElement('tr');
-            ['question', 'answer', 'box'].forEach((field) => {
+            CSV_FIELDS.forEach((field) => {
                 const td = document.createElement('td');
                 td.contentEditable = 'true';
                 td.dataset.rowIndex = String(index);
-                td.dataset.field = field;
+                td.dataset.field = field.key;
                 td.className = 'csv-inline-editor__cell';
-                td.textContent = row[field];
+                td.textContent = row[field.key] ?? '';
                 tr.appendChild(td);
             });
             body.appendChild(tr);
