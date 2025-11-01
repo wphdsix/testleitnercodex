@@ -40,6 +40,7 @@ export class LeitnerApp {
 
         this.reviewIntervals = [...LeitnerEngine.DEFAULT_CURVE];
         this.userConfig = { ...DEFAULT_USER_CONFIG };
+        this.nextReviewCard = null;
 
         this.currentQuestionImageFile = null;
         this.currentAnswerImageFile = null;
@@ -248,15 +249,17 @@ export class LeitnerApp {
     }
 
     refreshBoxes() {
-        const summaries = LeitnerEngine.summariseBoxes(
-            this.flashcards,
-            this.getActiveCurve(),
-            this.userConfig.difficulties
-        );
+        const now = Date.now();
+        const context = this.getEngineContext(now);
+        const summaries = LeitnerEngine.summariseBoxes(this.flashcards, context);
+        const nextCard = this.getNextCardForReview(now, context);
+        this.nextReviewCard = nextCard;
 
         this.ui.renderBoxes(summaries, {
             onSelectBox: this.handleBoxSelection
         });
+
+        this.emit('leitner:next-card', { card: nextCard, csv: this.currentCSV });
     }
 
     updateBoxes() {
@@ -264,28 +267,48 @@ export class LeitnerApp {
     }
 
     handleBoxSelection(boxNumber) {
-        this.ui.showCardsList(boxNumber, this.flashcards);
+        this.ui.showCardsList(boxNumber, this.getCardsForBox(boxNumber));
     }
 
-    getCardNextReview(card) {
+    getCardNextReview(card, now = Date.now()) {
+        const context = this.getEngineContext(now);
+        if (card?.nextReview && Number.isFinite(Number(card.nextReview))) {
+            return Number(card.nextReview);
+        }
         return LeitnerEngine.computeCardNextReview(
             card,
-            this.getActiveCurve(),
-            this.userConfig.difficulties
+            context.curve,
+            context.difficulties,
+            context.now
         );
     }
 
-    normaliseCard(card) {
-        return LeitnerEngine.normaliseCard(card, {
+    getEngineContext(now = Date.now()) {
+        return {
             curve: this.getActiveCurve(),
             difficulties: this.userConfig.difficulties,
             defaultDifficulty: this.userConfig.defaultDifficulty,
-            now: Date.now()
-        });
+            now
+        };
+    }
+
+    getCardsForBox(boxNumber, now = Date.now(), context = null) {
+        const engineContext = context || this.getEngineContext(now);
+        return LeitnerEngine.getCardsForBox(this.flashcards, boxNumber, engineContext);
+    }
+
+    getNextCardForReview(now = Date.now(), context = null) {
+        const engineContext = context || this.getEngineContext(now);
+        return LeitnerEngine.selectNextCard(this.flashcards, engineContext);
+    }
+
+    normaliseCard(card, now = Date.now()) {
+        return LeitnerEngine.normaliseCard(card, this.getEngineContext(now));
     }
 
     saveFlashcards() {
-        const normalized = this.flashcards.map(card => this.normaliseCard(card));
+        const now = Date.now();
+        const normalized = this.flashcards.map(card => this.normaliseCard(card, now));
         this.flashcards = normalized;
 
         if (this.currentCSV && this.currentCSV !== 'default') {
@@ -293,7 +316,11 @@ export class LeitnerApp {
         }
 
         this.refreshBoxes();
-        this.emit('leitner:cards-updated', { cards: this.flashcards, csv: this.currentCSV });
+        this.emit('leitner:cards-updated', {
+            cards: this.flashcards,
+            csv: this.currentCSV,
+            nextCard: this.nextReviewCard
+        });
     }
 
     processAnswer(isCorrect) {
@@ -329,7 +356,7 @@ export class LeitnerApp {
         });
 
         if (!document.getElementById('cards-list-container').classList.contains('hidden')) {
-            this.ui.showCardsList(this.currentBoxNumber, this.flashcards);
+            this.ui.showCardsList(this.currentBoxNumber, this.getCardsForBox(this.currentBoxNumber));
         }
 
         this.currentDifficulty = null;
@@ -337,9 +364,13 @@ export class LeitnerApp {
 
     onCardUpdated() {
         if (!document.getElementById('cards-list-container').classList.contains('hidden')) {
-            this.ui.showCardsList(this.currentBoxNumber, this.flashcards);
+            this.ui.showCardsList(this.currentBoxNumber, this.getCardsForBox(this.currentBoxNumber));
         }
-        this.emit('leitner:cards-updated', { cards: this.flashcards, csv: this.currentCSV });
+        this.emit('leitner:cards-updated', {
+            cards: this.flashcards,
+            csv: this.currentCSV,
+            nextCard: this.nextReviewCard
+        });
     }
 
     resetAllData() {
@@ -357,7 +388,11 @@ export class LeitnerApp {
             this.history.startSession({ mode: 'review' });
 
             alert('Toutes les données ont été réinitialisées.');
-            this.emit('leitner:cards-updated', { cards: this.flashcards, csv: this.currentCSV });
+            this.emit('leitner:cards-updated', {
+                cards: this.flashcards,
+                csv: this.currentCSV,
+                nextCard: this.nextReviewCard
+            });
         }
     }
 
