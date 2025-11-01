@@ -104,26 +104,44 @@
                                 <textarea id="card-question" class="w-full p-2 border rounded" rows="3" required></textarea>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Image question (fichier)</label>
-                                <div class="flex gap-2">
-                                    <input type="text" id="card-question-image" class="flex-1 p-2 border rounded" placeholder="nom-du-fichier.jpg">
-                                    <input type="file" id="question-image-upload" class="hidden" accept="image/*">
-                                    <button type="button" id="browse-question-image" class="bg-gray-200 px-3 rounded hover:bg-gray-300">Parcourir</button>
+                                <label class="block text-sm font-medium text-gray-700 mb-1" for="card-question-image">Image question</label>
+                                <div class="image-input-wrapper space-y-2">
+                                    <div class="flex flex-col gap-2 md:flex-row md:items-start">
+                                        <div class="flex flex-1 flex-wrap gap-2 md:flex-nowrap">
+                                            <input type="text" id="card-question-image" class="flex-1 p-2 border rounded" placeholder="nom-du-fichier.jpg" aria-describedby="question-image-status">
+                                            <input type="file" id="question-image-upload" class="hidden" accept="image/*">
+                                            <button type="button" id="browse-question-image" class="bg-gray-200 px-3 rounded hover:bg-gray-300">Parcourir</button>
+                                            <button type="button" id="clear-question-image" class="bg-red-100 text-red-600 px-3 rounded hover:bg-red-200">Retirer</button>
+                                        </div>
+                                        <div id="question-image-dropzone" class="image-dropzone" tabindex="0" role="button" aria-describedby="question-image-status">
+                                            <span>Glissez-déposez, collez ou cliquez pour ajouter une image.</span>
+                                        </div>
+                                    </div>
+                                    <p id="question-image-status" class="image-status">Aucune image sélectionnée.</p>
+                                    <img id="question-image-preview" class="image-preview" alt="Prévisualisation de l'image question" aria-hidden="true">
                                 </div>
-                                <img id="question-image-preview" class="image-preview mt-2">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Réponse</label>
                                 <textarea id="card-answer" class="w-full p-2 border rounded" rows="3" required></textarea>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Image réponse (fichier)</label>
-                                <div class="flex gap-2">
-                                    <input type="text" id="card-answer-image" class="flex-1 p-2 border rounded" placeholder="nom-du-fichier.jpg">
-                                    <input type="file" id="answer-image-upload" class="hidden" accept="image/*">
-                                    <button type="button" id="browse-answer-image" class="bg-gray-200 px-3 rounded hover:bg-gray-300">Parcourir</button>
+                                <label class="block text-sm font-medium text-gray-700 mb-1" for="card-answer-image">Image réponse</label>
+                                <div class="image-input-wrapper space-y-2">
+                                    <div class="flex flex-col gap-2 md:flex-row md:items-start">
+                                        <div class="flex flex-1 flex-wrap gap-2 md:flex-nowrap">
+                                            <input type="text" id="card-answer-image" class="flex-1 p-2 border rounded" placeholder="nom-du-fichier.jpg" aria-describedby="answer-image-status">
+                                            <input type="file" id="answer-image-upload" class="hidden" accept="image/*">
+                                            <button type="button" id="browse-answer-image" class="bg-gray-200 px-3 rounded hover:bg-gray-300">Parcourir</button>
+                                            <button type="button" id="clear-answer-image" class="bg-red-100 text-red-600 px-3 rounded hover:bg-red-200">Retirer</button>
+                                        </div>
+                                        <div id="answer-image-dropzone" class="image-dropzone" tabindex="0" role="button" aria-describedby="answer-image-status">
+                                            <span>Glissez-déposez, collez ou cliquez pour ajouter une image.</span>
+                                        </div>
+                                    </div>
+                                    <p id="answer-image-status" class="image-status">Aucune image sélectionnée.</p>
+                                    <img id="answer-image-preview" class="image-preview" alt="Prévisualisation de l'image réponse" aria-hidden="true">
                                 </div>
-                                <img id="answer-image-preview" class="image-preview mt-2">
                             </div>
                             <div class="flex justify-end gap-3 pt-4">
                                 <button type="button" id="cancel-edit" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">

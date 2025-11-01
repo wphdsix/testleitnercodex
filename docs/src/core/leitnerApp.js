@@ -43,6 +43,8 @@ export class LeitnerApp {
 
         this.currentQuestionImageFile = null;
         this.currentAnswerImageFile = null;
+        this.currentQuestionImageData = null;
+        this.currentAnswerImageData = null;
 
         this.handleBoxSelection = this.handleBoxSelection.bind(this);
 

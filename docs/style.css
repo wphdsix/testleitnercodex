@@ -114,6 +114,44 @@
     margin-top: 10px;
     display: none;
 }
+.image-input-wrapper {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 12px;
+    background: #f9fafb;
+}
+.image-dropzone {
+    border: 2px dashed #d1d5db;
+    border-radius: 12px;
+    padding: 12px;
+    text-align: center;
+    cursor: pointer;
+    color: #4b5563;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+    min-width: 200px;
+    flex: 1 1 220px;
+    max-width: 320px;
+}
+.image-input-wrapper .image-dropzone {
+    width: 100%;
+}
+.image-dropzone span {
+    display: block;
+    font-size: 0.85rem;
+}
+.image-dropzone:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+.image-dropzone--active {
+    border-color: #2563eb;
+    background-color: rgba(37, 99, 235, 0.1);
+}
+.image-status {
+    font-size: 0.75rem;
+    color: #4b5563;
+    min-height: 1rem;
+}
 .github-config {
     background-color: #f8f9fa;
     border-radius: 8px;

@@ -3,8 +3,250 @@ export class UIManager {
         this.app = app;
         this.boxClickHandler = null;
         this.keyboardManager = app?.keyboardManager || null;
+        this.imageFieldControllers = {};
         this.bindEvents();
         this.registerKeyboardShortcuts();
+    }
+
+    readFileAsDataURL(file) {
+        return new Promise((resolve, reject) => {
+            if (!file) {
+                resolve(null);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    setupImageField(type) {
+        const prefix = type === 'question' ? 'question' : 'answer';
+        const textInput = document.getElementById(`card-${prefix}-image`);
+        const fileInput = document.getElementById(`${prefix}-image-upload`);
+        const browseButton = document.getElementById(`browse-${prefix}-image`);
+        const dropzone = document.getElementById(`${prefix}-image-dropzone`);
+        const preview = document.getElementById(`${prefix}-image-preview`);
+        const status = document.getElementById(`${prefix}-image-status`);
+        const clearButton = document.getElementById(`clear-${prefix}-image`);
+
+        if (!textInput) {
+            return {
+                updateFromValue: () => {},
+                clear: () => {}
+            };
+        }
+
+        const setAppImageState = ({ file = null, data = null } = {}) => {
+            if (type === 'question') {
+                this.app.currentQuestionImageFile = file;
+                this.app.currentQuestionImageData = data;
+            } else {
+                this.app.currentAnswerImageFile = file;
+                this.app.currentAnswerImageData = data;
+            }
+        };
+
+        const setStatus = (message) => {
+            if (status) {
+                status.textContent = message || '';
+            }
+        };
+
+        const hidePreview = () => {
+            if (!preview) {
+                return;
+            }
+            preview.removeAttribute('src');
+            preview.style.display = 'none';
+            preview.setAttribute('aria-hidden', 'true');
+        };
+
+        const showPreview = (src) => {
+            if (!preview || !src) {
+                hidePreview();
+                return;
+            }
+            preview.onerror = () => {
+                hidePreview();
+                setStatus('Impossible de charger l\'image fournie.');
+            };
+            preview.src = src;
+            preview.style.display = 'block';
+            preview.setAttribute('aria-hidden', 'false');
+        };
+
+        const clear = (options = {}) => {
+            textInput.value = '';
+            setAppImageState({ file: null, data: null });
+            hidePreview();
+            if (!options.silent) {
+                setStatus('Aucune image sélectionnée.');
+            } else {
+                setStatus('');
+            }
+        };
+
+        const useDataUrl = (dataUrl, { label = 'Image intégrée.' } = {}) => {
+            if (!dataUrl) {
+                clear({ silent: true });
+                return;
+            }
+            showPreview(dataUrl);
+            textInput.value = '';
+            setStatus(label);
+            setAppImageState({ file: null, data: dataUrl });
+        };
+
+        const useExternalPath = (value) => {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                clear({ silent: true });
+                return;
+            }
+
+            const resolvedUrl = this.app.github.getImageUrl(trimmed, type);
+            showPreview(resolvedUrl);
+            setStatus('Chemin personnalisé appliqué.');
+            setAppImageState({ file: null, data: null });
+        };
+
+        const handleFileSelection = async (file, originLabel) => {
+            if (!file) {
+                return;
+            }
+            try {
+                const dataUrl = await this.readFileAsDataURL(file);
+                showPreview(dataUrl);
+                textInput.value = file.name;
+                const origin = originLabel || 'importée';
+                setStatus(`Image ${origin} et prête à être sauvegardée.`);
+                setAppImageState({ file, data: dataUrl });
+            } catch (error) {
+                console.error('Impossible de lire le fichier image sélectionné', error);
+                setStatus('Échec de la lecture du fichier image.');
+            }
+            if (fileInput) {
+                fileInput.value = '';
+            }
+        };
+
+        browseButton?.addEventListener('click', (event) => {
+            event.preventDefault();
+            fileInput?.click();
+        });
+
+        fileInput?.addEventListener('change', (event) => {
+            const file = event.target.files && event.target.files[0];
+            if (file) {
+                handleFileSelection(file, 'importée');
+            }
+        });
+
+        if (dropzone) {
+            const deactivateDropzone = () => dropzone.classList.remove('image-dropzone--active');
+
+            dropzone.addEventListener('click', () => fileInput?.click());
+            dropzone.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    fileInput?.click();
+                }
+            });
+            dropzone.addEventListener('dragover', (event) => {
+                event.preventDefault();
+                dropzone.classList.add('image-dropzone--active');
+            });
+            dropzone.addEventListener('dragleave', () => {
+                deactivateDropzone();
+            });
+            dropzone.addEventListener('drop', (event) => {
+                event.preventDefault();
+                deactivateDropzone();
+                const file = event.dataTransfer?.files?.[0];
+                if (file) {
+                    handleFileSelection(file, 'déposée');
+                }
+            });
+            dropzone.addEventListener('paste', (event) => {
+                const items = event.clipboardData?.items;
+                if (!items) {
+                    return;
+                }
+                for (let index = 0; index < items.length; index += 1) {
+                    const item = items[index];
+                    if (item && item.type && item.type.startsWith('image/')) {
+                        const file = item.getAsFile();
+                        if (file) {
+                            event.preventDefault();
+                            handleFileSelection(file, 'collée');
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
+        clearButton?.addEventListener('click', (event) => {
+            event.preventDefault();
+            clear();
+        });
+
+        textInput.addEventListener('change', () => {
+            const value = textInput.value.trim();
+            if (!value) {
+                clear({ silent: true });
+                return;
+            }
+
+            if (value.startsWith('data:')) {
+                useDataUrl(value, { label: 'Image intégrée depuis le champ.' });
+            } else {
+                useExternalPath(value);
+            }
+        });
+
+        textInput.addEventListener('input', () => {
+            if (textInput.value.trim()) {
+                setAppImageState({ file: null, data: null });
+            }
+        });
+
+        const updateFromValue = (value) => {
+            if (!value) {
+                clear();
+                return;
+            }
+
+            if (typeof value === 'string' && value.startsWith('data:')) {
+                useDataUrl(value, { label: 'Image intégrée (collée ou importée).' });
+            } else {
+                const simplified = this.app.github.simplifyImagePath(value, type);
+                textInput.value = simplified;
+                useExternalPath(simplified);
+            }
+        };
+
+        return {
+            updateFromValue,
+            clear
+        };
+    }
+
+    resetImageControllers(options = {}) {
+        const { silent = true } = options;
+        if (this.imageFieldControllers?.question?.clear) {
+            this.imageFieldControllers.question.clear({ silent });
+        }
+        if (this.imageFieldControllers?.answer?.clear) {
+            this.imageFieldControllers.answer.clear({ silent });
+        }
+        this.app.currentQuestionImageFile = null;
+        this.app.currentAnswerImageFile = null;
+        this.app.currentQuestionImageData = null;
+        this.app.currentAnswerImageData = null;
     }
 
     renderBoxes(boxSummaries, { onSelectBox } = {}) {
@@ -227,65 +469,27 @@ export class UIManager {
         const title = document.getElementById('editor-title');
         
         if (card) {
-            // Mode édition
             title.textContent = 'Modifier la carte';
             document.getElementById('card-id').value = card.id;
             document.getElementById('card-question').value = card.question;
-            
-            // Pour les images, extraire seulement le nom du fichier de l'URL complète
-            if (card.questionImage) {
-                let questionImageValue = card.questionImage;
-                // Si c'est une URL, extraire le nom du fichier
-                if (questionImageValue.includes('/')) {
-                    const parts = questionImageValue.split('/');
-                    questionImageValue = parts[parts.length - 1];
-                }
-                document.getElementById('card-question-image').value = questionImageValue;
-            } else {
-                document.getElementById('card-question-image').value = '';
-            }
-            
             document.getElementById('card-answer').value = card.answer;
-            
-            if (card.answerImage) {
-                let answerImageValue = card.answerImage;
-                // Si c'est une URL, extraire le nom du fichier
-                if (answerImageValue.includes('/')) {
-                    const parts = answerImageValue.split('/');
-                    answerImageValue = parts[parts.length - 1];
-                }
-                document.getElementById('card-answer-image').value = answerImageValue;
-            } else {
-                document.getElementById('card-answer-image').value = '';
+
+            if (this.imageFieldControllers?.question) {
+                this.imageFieldControllers.question.updateFromValue(card.questionImage || '');
             }
-            
-            // Afficher les prévisualisations d'images (optionnel)
-            if (card.questionImage) {
-                const imageUrl = this.app.github.getImageUrl(card.questionImage, 'question');
-                document.getElementById('question-image-preview').src = imageUrl;
-                document.getElementById('question-image-preview').style.display = 'block';
-                document.getElementById('question-image-preview').onerror = "this.style.display='none'";
-            } else {
-                document.getElementById('question-image-preview').style.display = 'none';
-            }
-            
-            if (card.answerImage) {
-                const imageUrl = this.app.github.getImageUrl(card.answerImage, 'answer');
-                document.getElementById('answer-image-preview').src = imageUrl;
-                document.getElementById('answer-image-preview').style.display = 'block';
-                document.getElementById('answer-image-preview').onerror = "this.style.display='none'";
-            } else {
-                document.getElementById('answer-image-preview').style.display = 'none';
+            if (this.imageFieldControllers?.answer) {
+                this.imageFieldControllers.answer.updateFromValue(card.answerImage || '');
             }
         } else {
-            // Mode création
             title.textContent = 'Nouvelle carte';
             form.reset();
             document.getElementById('card-id').value = '';
-            
-            // Cacher les prévisualisations d'images
-            document.getElementById('question-image-preview').style.display = 'none';
-            document.getElementById('answer-image-preview').style.display = 'none';
+            if (this.imageFieldControllers?.question) {
+                this.imageFieldControllers.question.clear();
+            }
+            if (this.imageFieldControllers?.answer) {
+                this.imageFieldControllers.answer.clear();
+            }
         }
         
         const editor = document.getElementById('card-editor');
@@ -298,6 +502,7 @@ export class UIManager {
         const editor = document.getElementById('card-editor');
         editor.classList.add('hidden');
         editor.setAttribute('aria-hidden', 'true');
+        this.resetImageControllers({ silent: true });
     }
     
     formatTime(timestamp) {
@@ -490,51 +695,8 @@ export class UIManager {
         });
  
 
-        // Gestion des images
-        document.getElementById('browse-question-image').addEventListener('click', () => {
-            document.getElementById('question-image-upload').click();
-        });
-
-        document.getElementById('question-image-upload').addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                const file = e.target.files[0];
-                // Stocker le fichier pour l'upload ultérieur
-                this.app.currentQuestionImageFile = file;
-                // Afficher seulement le nom du fichier dans le champ
-                document.getElementById('card-question-image').value = file.name;
-                
-                // Prévisualisation temporaire (optionnelle)
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    document.getElementById('question-image-preview').src = event.target.result;
-                    document.getElementById('question-image-preview').style.display = 'block';
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-
-
-        document.getElementById('browse-answer-image').addEventListener('click', () => {
-            document.getElementById('answer-image-upload').click();
-        });
-
-        document.getElementById('answer-image-upload').addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                const file = e.target.files[0];
-                // Stocker le fichier pour l'upload ultérieur
-                this.app.currentAnswerImageFile = file;
-                // Afficher seulement le nom du fichier dans le champ
-                document.getElementById('card-answer-image').value = file.name;
-
-                // Prévisualisation temporaire (optionnelle)
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    document.getElementById('answer-image-preview').src = event.target.result;
-                    document.getElementById('answer-image-preview').style.display = 'block';
-                };
-                reader.readAsDataURL(file);
-            }
-        });
+        this.imageFieldControllers.question = this.setupImageField('question');
+        this.imageFieldControllers.answer = this.setupImageField('answer');
 
         const difficultySelect = document.getElementById('answer-difficulty');
         if (difficultySelect) {

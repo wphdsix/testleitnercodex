@@ -25,6 +25,14 @@ Le service worker capture les requêtes `POST`/`PUT`/`DELETE` transmises via `qu
 
 Les rappels créés par `NotificationService` utilisent le service worker pour programmer des notifications futures. Le service worker garde une copie des notifications planifiées et les affiche même après un redémarrage du navigateur (grâce au stockage IndexedDB et au `SyncManager`).
 
+## Édition des cartes avec images
+
+Le nouvel éditeur autorise l'ajout d'illustrations sans dépendre d'un dépôt distant :
+
+- **Déposer, coller ou parcourir.** Chaque champ image propose une zone de dépôt qui accepte le glisser-déposer, le clic (ouvre le sélecteur de fichiers) ou le collage depuis le presse-papiers. Les aperçus se mettent à jour instantanément.
+- **Stockage hors-ligne.** Les fichiers sélectionnés sont convertis en Data URL et sauvegardés avec la carte, garantissant leur disponibilité hors connexion. Vous pouvez toujours saisir un chemin distant si vous préférez héberger l'image ailleurs.
+- **Gestion simple.** Utilisez le bouton *Retirer* pour supprimer une image ou remplacer rapidement une illustration avant d'enregistrer la carte.
+
 ## Sauvegarde et revert
 
 Deux mécanismes facilitent la sauvegarde des paquets et leur restauration :
