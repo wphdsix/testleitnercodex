@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Système Leitner - Gestion de Flashcards</title>
+    <link rel="stylesheet" href="style.css">
+        <!-- Icône du site (favicon) -->
+    <link rel="icon" type="image/png" href="mordor-2340048_1280.png">
+    <!-- Variante avec un .ico classique -->
+    <!-- <link rel="icon" href="favicon.ico" type="image/x-icon"> -->
+</head>
+<body class="site-background text-gray-800">
+    <div class="container mx-auto max-w-6xl p-5">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Démonstration du système de Leitner</h1>
+            <p class="text-gray-600">Apprentissage par répétition espacée</p>
+            <p class="text-gray-600">Par OM en 2025.09.03</p>            
+        </header>
+
+        <!-- Section gestion des fichiers -->
+        <div class="bg-white rounded-lg shadow-md p-5 mb-6">
+            <div class="flex flex-wrap justify-between items-center mb-4">
+                <h2 class="text-xl font-bold mb-4 md:mb-0 w-full md:w-auto">Gestion des fichiers CSV</h2>
+                <div class="flex flex-wrap gap-2 w-full md:w-auto">
+                    <button id="add-card-btn" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex-1 md:flex-none">
+                        + Nouvelle carte
+                    </button>
+                    <button id="download-csv" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex-1 md:flex-none">
+                        Télécharger CSV
+                    </button>
+                    <button id="import-csv" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 flex-1 md:flex-none">
+                        Importer CSV
+                    </button>
+                    <input type="file" id="csv-file" class="hidden" accept=".csv">
+                </div>
+            </div>
+
+            <div class="mb-4 flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
+                <select id="csv-selector" class="p-2 border rounded w-full md:min-w-[250px] md:max-w-[350px]">
+                    <option value="default">Chargement des fichiers...</option>
+                </select>
+                <div class="flex gap-2 w-full md:w-auto">
+                    <button id="load-csv" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 flex-1 md:flex-none whitespace-nowrap">
+                        Charger
+                    </button>
+                    <button id="create-csv" class="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700 flex-1 md:flex-none whitespace-nowrap">
+                        Nouveau CSV
+                    </button>
+                </div>
+            </div>
+
+            <div id="new-csv-form" class="hidden mt-4 p-4 bg-gray-100 rounded">
+                <div class="flex flex-col md:flex-row md:items-center gap-2">
+                    <input type="text" id="new-csv-name" placeholder="Nom du fichier (sans .csv)" class="p-2 border rounded flex-1 md:max-w-[300px]">
+                    <button id="save-new-csv" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 mt-2 md:mt-0">
+                        Créer
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- Boîtes Leitner -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+            <!-- Les boîtes seront générées dynamiquement -->
+        </div>
+        <!-- Liste des cartes -->
+        <div id="cards-list-container" class="hidden bg-white rounded-lg shadow-md p-5 mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="cards-list-title" class="text-xl font-bold">Cartes de la boîte <span id="current-box-number">1</span></h3>
+                <button id="close-cards-list" class="text-gray-500 hover:text-gray-700">
+                    ✕
+                </button>
+            </div>
+            <div id="cards-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+        </div>
+
+        <!-- Éditeur de carte -->
+        <div id="card-editor" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50">
+            <div class="bg-white rounded-xl shadow-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+                <h3 class="text-xl font-bold mb-4" id="editor-title">Nouvelle carte</h3>
+                <form id="card-form" class="space-y-4">
+                    <input type="hidden" id="card-id">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Question</label>
+                        <textarea id="card-question" class="w-full p-2 border rounded" rows="3" required></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Image question (fichier)</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="card-question-image" class="flex-1 p-2 border rounded" placeholder="nom-du-fichier.jpg">
+                            <input type="file" id="question-image-upload" class="hidden" accept="image/*">
+                            <button type="button" id="browse-question-image" class="bg-gray-200 px-3 rounded hover:bg-gray-300">Parcourir</button>
+                        </div>
+                        <img id="question-image-preview" class="image-preview mt-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Réponse</label>
+                        <textarea id="card-answer" class="w-full p-2 border rounded" rows="3" required></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Image réponse (fichier)</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="card-answer-image" class="flex-1 p-2 border rounded" placeholder="nom-du-fichier.jpg">
+                            <input type="file" id="answer-image-upload" class="hidden" accept="image/*">
+                            <button type="button" id="browse-answer-image" class="bg-gray-200 px-3 rounded hover:bg-gray-300">Parcourir</button>
+                        </div>
+                        <img id="answer-image-preview" class="image-preview mt-2">
+                    </div>
+                    <div class="flex justify-end gap-3 pt-4">
+                        <button type="button" id="cancel-edit" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                            Annuler
+                        </button>
+                        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                            Sauvegarder
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Visualisateur de carte -->
+        <div id="flashcard-container" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50">
+            <div class="flashcard bg-white rounded-xl shadow-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+                <div class="question-section bg-gray-50 rounded-lg p-4 mb-5">
+                    <h3 class="font-bold text-lg mb-3">Question</h3>
+                    <div id="question-content" class="text-lg my-4"></div>
+                    <div id="last-reviewed" class="text-sm text-gray-500 italic"></div>
+                </div>
+                <button id="show-answer-btn" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 mb-5">
+                    Voir la réponse
+                </button>
+                <div id="answer-section" class="hidden bg-gray-100 rounded-lg p-4 mt-5">
+                    <h3 class="font-bold text-lg mb-3">Réponse</h3>
+                    <div id="answer-content" class="text-lg my-4"></div>
+                    <div class="flex flex-wrap gap-3 mt-6">
+                        <button id="wrong-answer" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold hover:bg-red-600">
+                            Faux
+                        </button>
+                        <button id="right-answer" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold hover:bg-green-600">
+                            Vrai
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-4 flex justify-between">
+                    <button id="edit-card-btn" class="text-blue-600 hover:text-blue-800">
+                        Modifier
+                    </button>
+                    <button id="delete-card-btn" class="text-red-600 hover:text-red-800">
+                        Supprimer
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bouton Admin -->
+        <div class="admin-button" id="admin-button">
+            ⚙️
+        </div>
+
+        <!-- Panel Admin -->
+        <div id="admin-panel" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50">
+            <div class="bg-white rounded-xl shadow-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold">Paramètres Administrateur</h3>
+                    <button id="close-admin" class="text-gray-500 hover:text-gray-700 text-xl">
+                        ✕
+                    </button>
+                </div>
+
+                <div class="space-y-6">
+                    <!-- Configuration GitHub -->
+                    <div class="github-config bg-gray-100 rounded-lg p-4">
+                        <h4 class="font-bold text-lg mb-3">Configuration GitHub</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Propriétaire du dépôt</label>
+                                <input type="text" id="repo-owner" class="w-full p-2 border rounded" placeholder="votre-nom-utilisateur">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Nom du dépôt</label>
+                                <input type="text" id="repo-name" class="w-full p-2 border rounded" placeholder="nom-du-dépôt">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Chemin du dossier (optionnel)</label>
+                                <input type="text" id="repo-path" class="w-full p-2 border rounded" placeholder="docs/">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Token d'accès (optionnel)</label>
+                                <input type="password" id="github-token" class="w-full p-2 border rounded" placeholder="ghp_xxx">
+                                <p class="text-xs text-gray-500 mt-1">Nécessaire seulement pour les dépôts privés</p>
+                            </div>
+                        </div>
+                        <button id="load-github-csv" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                            Charger les fichiers depuis GitHub
+                        </button>
+                    </div>
+
+                    <!-- Intervalles de révision -->
+                    <div class="intervals-config bg-gray-100 rounded-lg p-4">
+                        <h4 class="font-bold text-lg mb-3">Intervalles de révision (en heures)</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Boîte 1</label>
+                                <input type="number" id="interval-1" class="interval-input p-2 border rounded" min="1" value="1">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Boîte 2</label>
+                                <input type="number" id="interval-2" class="interval-input p-2 border rounded" min="1" value="3">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Boîte 3</label>
+                                <input type="number" id="interval-3" class="interval-input p-2 border rounded" min="1" value="9">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Boîte 4</label>
+                                <input type="number" id="interval-4" class="interval-input p-2 border rounded" min="1" value="27">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Boîte 5</label>
+                                <input type="number" id="interval-5" class="interval-input p-2 border rounded" min="1" value="81">
+                            </div>
+                        </div>
+                        <div class="mt-4 flex justify-end">
+                            <button id="save-intervals" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                                Sauvegarder les intervalles
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Actions administratives -->
+                    <div class="admin-actions bg-gray-100 rounded-lg p-4">
+                        <h4 class="font-bold text-lg mb-3">Actions</h4>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="reset-all" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
+                                Réinitialiser toutes les données
+                            </button>
+                            <button id="export-all" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                                Exporter toutes les données
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chargement des modules JavaScript -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>

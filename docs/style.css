@@ -1,0 +1,245 @@
+.site-background {
+    background-color: #f0f7ff;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+}
+.flashcard-container, #card-editor, #admin-panel {
+    transition: opacity 0.3s ease;
+    background-color: rgba(0, 0, 0, 0.8);
+}
+.box-border-1 { border-top: 5px solid #FF6B6B; }
+.box-border-2 { border-top: 5px solid #FFD166; }
+.box-border-3 { border-top: 5px solid #06D6A0; }
+.box-border-4 { border-top: 5px solid #118AB2; }
+.box-border-5 { border-top: 5px solid #073B4C; }
+.text-box1 { color: #FF6B6B; }
+.text-box2 { color: #FFD166; }
+.text-box3 { color: #06D6A0; }
+.text-box4 { color: #118AB2; }
+.text-box5 { color: #073B4C; }
+.card-item {
+    padding: 12px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    border-left: 4px solid #6c757d;
+}
+.card-item:hover {
+    background-color: #e9ecef;
+}
+.question-content img,
+.answer-content img {
+    max-width: 100%;
+    max-height: 300px;
+    display: block;
+    margin: 10px auto;
+    border-radius: 5px;
+    object-fit: contain;
+}
+.thumbnail-container {
+    width: 48px;
+    height: 48px;
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.thumbnail-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.2s;
+}
+.card-item:hover .thumbnail-image {
+    transform: scale(1.05);
+}
+@media (max-width: 640px) {
+    .container {
+        padding: 10px;
+    }
+}
+.image-preview {
+    max-width: 200px;
+    max-height: 150px;
+    margin-top: 10px;
+    display: none;
+}
+.github-config {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+.admin-button {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    background-color: #4B5563;
+    color: white;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+}
+.interval-input {
+    width: 60px;
+    text-align: center;
+}
+/* Responsive design pour les boutons */
+@media (max-width: 640px) {
+    .container {
+        padding: 10px;
+    }
+    
+    /* Adaptation de la section gestion des fichiers */
+    .bg-white.rounded-lg.shadow-md.p-5.mb-6 {
+        padding: 15px !important;
+    }
+    
+    /* Alignement vertical des boutons sur mobile */
+    .flex.items-center.gap-4 {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px !important;
+    }
+    
+    /* Style du sélecteur CSV sur mobile */
+    #csv-selector {
+        min-width: 100% !important;
+        margin-bottom: 10px;
+    }
+    
+    /* Boutons responsives */
+    #load-csv, #create-csv {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    
+    /* Groupe de boutons */
+    .flex.flex-wrap.gap-2 {
+        justify-content: center;
+    }
+    
+    .flex.flex-wrap.gap-2 > button {
+        flex: 1 0 45%;
+        min-width: 120px;
+        margin-bottom: 8px;
+    }
+    
+    /* Formulaire nouveau CSV */
+    #new-csv-form .flex.items-center.gap-2 {
+        flex-direction: column;
+    }
+    
+    #new-csv-name {
+        margin-bottom: 10px;
+    }
+}
+
+/* Pour les écrans moyens */
+@media (max-width: 768px) {
+    .flex.items-center.gap-4 {
+        flex-wrap: wrap;
+    }
+    
+    #csv-selector {
+        min-width: 200px !important;
+        flex-grow: 1;
+    }
+    
+    #load-csv, #create-csv {
+        flex: 1;
+        min-width: 100px;
+    }
+}
+
+/* Responsive design pour les boutons */
+@media (max-width: 640px) {
+    .container {
+        padding: 10px;
+    }
+    
+    /* Adaptation de la section gestion des fichiers */
+    .bg-white.rounded-lg.shadow-md.p-5.mb-6 {
+        padding: 15px !important;
+    }
+    
+    /* Alignement vertical des boutons sur mobile */
+    .flex.items-center.gap-4 {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px !important;
+    }
+    
+    /* Style du sélecteur CSV sur mobile */
+    #csv-selector {
+        min-width: 100% !important;
+        margin-bottom: 10px;
+    }
+    
+    /* Boutons responsives */
+    #load-csv, #create-csv {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    
+    /* Groupe de boutons */
+    .flex.flex-wrap.gap-2 {
+        justify-content: center;
+    }
+    
+    .flex.flex-wrap.gap-2 > button {
+        flex: 1 0 45%;
+        min-width: 120px;
+        margin-bottom: 8px;
+    }
+    
+    /* Formulaire nouveau CSV */
+    #new-csv-form .flex.items-center.gap-2 {
+        flex-direction: column;
+    }
+    
+    #new-csv-name {
+        margin-bottom: 10px;
+    }
+}
+
+/* Pour les écrans d'ordinateur - Correction de la largeur */
+@media (min-width: 641px) {
+    .flex.items-center.gap-4 {
+        flex-wrap: nowrap;
+    }
+    
+    #csv-selector {
+        min-width: 250px !important;
+        max-width: 350px; /* Limite la largeur maximale */
+    }
+    
+    #load-csv, #create-csv {
+        white-space: nowrap; /* Empêche le texte de se casser */
+        flex-shrink: 0; /* Empêche le rétrécissement */
+    }
+}
+
+/* Pour les écrans moyens - Optimisation */
+@media (max-width: 768px) and (min-width: 641px) {
+    .flex.items-center.gap-4 {
+        flex-wrap: wrap;
+    }
+    
+    #csv-selector {
+        min-width: 200px !important;
+        flex-grow: 1;
+    }
+    
+    #load-csv, #create-csv {
+        flex: 1;
+        min-width: 100px;
+    }
+}
