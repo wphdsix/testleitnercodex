@@ -1,6 +1,6 @@
-import { GitHubManager } from './github.js';
-import { UIManager } from './ui.js';
-import { CRUDManager } from './crud.js';
+import { GitHubManager } from '../data/github.js';
+import { UIManager } from '../ui/uiManager.js';
+import { CRUDManager } from '../data/crud.js';
 
 export class LeitnerApp {
     constructor(options = {}) {
