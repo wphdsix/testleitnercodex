@@ -2,7 +2,9 @@ export class UIManager {
     init(app) {
         this.app = app;
         this.boxClickHandler = null;
+        this.keyboardManager = app?.keyboardManager || null;
         this.bindEvents();
+        this.registerKeyboardShortcuts();
     }
 
     renderBoxes(boxSummaries, { onSelectBox } = {}) {
@@ -12,7 +14,10 @@ export class UIManager {
             return;
         }
 
-        if (!boxesContainer.hasChildNodes()) {
+        const existingBoxes = boxesContainer.querySelectorAll('.box');
+        if (existingBoxes.length === 0) {
+            boxesContainer.innerHTML = '';
+
             boxSummaries.forEach(summary => {
                 const box = document.createElement('div');
                 box.className = `box box-border-${summary.box} bg-white rounded-lg shadow-md p-4 text-center cursor-pointer hover:-translate-y-1 transition-transform`;
@@ -205,11 +210,15 @@ export class UIManager {
 
         document.getElementById('answer-section').classList.add('hidden');
         document.getElementById('show-answer-btn').style.display = 'block';
-        document.getElementById('flashcard-container').classList.remove('hidden');
+        const container = document.getElementById('flashcard-container');
+        container.classList.remove('hidden');
+        container.setAttribute('aria-hidden', 'false');
     }
-    
+
     hideCardViewer() {
-        document.getElementById('flashcard-container').classList.add('hidden');
+        const container = document.getElementById('flashcard-container');
+        container.classList.add('hidden');
+        container.setAttribute('aria-hidden', 'true');
     }
     
     // Dans ui.js, modifiez la méthode showCardEditor
@@ -279,11 +288,16 @@ export class UIManager {
             document.getElementById('answer-image-preview').style.display = 'none';
         }
         
-        document.getElementById('card-editor').classList.remove('hidden');
+        const editor = document.getElementById('card-editor');
+        editor.classList.remove('hidden');
+        editor.setAttribute('aria-hidden', 'false');
+        editor.querySelector('textarea, input, button')?.focus();
     }
-    
+
     hideCardEditor() {
-        document.getElementById('card-editor').classList.add('hidden');
+        const editor = document.getElementById('card-editor');
+        editor.classList.add('hidden');
+        editor.setAttribute('aria-hidden', 'true');
     }
     
     formatTime(timestamp) {
@@ -533,6 +547,59 @@ export class UIManager {
         if (saveDifficultiesButton) {
             saveDifficultiesButton.addEventListener('click', () => {
                 this.app.saveDifficulties();
+            });
+        }
+    }
+
+    registerKeyboardShortcuts() {
+        if (!this.keyboardManager) {
+            return;
+        }
+
+        const addButton = document.getElementById('add-card-btn');
+        if (addButton) {
+            this.keyboardManager.registerShortcut('ctrl+n', () => {
+                addButton.click();
+            }, {
+                description: 'Ajouter une nouvelle carte',
+                element: addButton
+            });
+        }
+
+        const showAnswerButton = document.getElementById('show-answer-btn');
+        if (showAnswerButton) {
+            this.keyboardManager.registerShortcut('ctrl+shift+space', () => {
+                const viewer = document.getElementById('flashcard-container');
+                if (!viewer.classList.contains('hidden')) {
+                    showAnswerButton.click();
+                }
+            }, {
+                description: 'Afficher la réponse courante',
+                element: showAnswerButton
+            });
+        }
+
+        const closeViewerButton = document.getElementById('wrong-answer');
+        if (closeViewerButton) {
+            this.keyboardManager.registerShortcut('ctrl+shift+w', () => {
+                const viewer = document.getElementById('flashcard-container');
+                if (!viewer.classList.contains('hidden')) {
+                    this.hideCardViewer();
+                }
+            }, {
+                description: 'Fermer la carte affichée',
+                element: closeViewerButton
+            });
+        }
+
+        const csvSelector = document.getElementById('csv-selector');
+        if (csvSelector) {
+            this.keyboardManager.registerShortcut('ctrl+shift+l', () => {
+                csvSelector.focus();
+            }, {
+                description: 'Focus sur la liste des CSV',
+                element: csvSelector,
+                global: true
             });
         }
     }
