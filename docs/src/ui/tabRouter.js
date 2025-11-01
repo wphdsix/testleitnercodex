@@ -2,6 +2,13 @@
  * Simple tab navigation router managing ARIA attributes and visibility.
  * The router reads tab definitions from the DOM using `data-tab-target` and
  * `data-tab-panel` attributes to keep HTML declarative.
+ *
+ * @class TabRouter
+ * @property {string} defaultTab - Tab identifier used when no persisted state exists.
+ * @property {string} storageKey - Key used to persist the last active tab in localStorage.
+ * @property {HTMLButtonElement[]} tabButtons - Collection of tab triggers discovered in the DOM.
+ * @property {HTMLElement[]} tabPanels - List of tab panels that get toggled.
+ * @property {string|null} activeTab - Identifier of the currently selected tab.
  */
 export class TabRouter {
     constructor(options = {}) {
@@ -14,6 +21,8 @@ export class TabRouter {
 
     /**
      * Initialise listeners and restore the last active tab when possible.
+     *
+     * @returns {void}
      */
     init() {
         this.tabButtons = Array.from(document.querySelectorAll('[data-tab-target]'));
@@ -33,7 +42,9 @@ export class TabRouter {
 
     /**
      * Activate a tab by id and update ARIA attributes for accessibility.
+     *
      * @param {string} tabId - Identifier matching the `data-tab-panel` attribute.
+     * @returns {void}
      */
     activateTab(tabId) {
         if (!this.isValidTab(tabId)) {
@@ -59,8 +70,9 @@ export class TabRouter {
 
     /**
      * Determine whether the provided tab id exists in the current DOM.
-     * @param {string|null} tabId
-     * @returns {boolean}
+     *
+     * @param {string|null} tabId - Identifier of the tab to validate.
+     * @returns {boolean} True when the tab exists, false otherwise.
      */
     isValidTab(tabId) {
         if (!tabId) {
