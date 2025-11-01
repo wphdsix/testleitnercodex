@@ -8,6 +8,45 @@
     transition: opacity 0.3s ease;
     background-color: rgba(0, 0, 0, 0.8);
 }
+
+.tab-container {
+    margin-bottom: 2rem;
+}
+
+.tab-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.tab-button {
+    background-color: #e5e7eb;
+    color: #374151;
+    border: none;
+    border-radius: 9999px;
+    padding: 0.6rem 1.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.tab-button:hover,
+.tab-button:focus-visible {
+    background-color: #d1d5db;
+    outline: none;
+}
+
+.tab-button-active {
+    background-color: #2563eb;
+    color: #ffffff;
+    box-shadow: 0 10px 25px rgba(37, 99, 235, 0.2);
+    transform: translateY(-1px);
+}
+
+.tab-panel {
+    outline: none;
+}
 .box-border-1 { border-top: 5px solid #FF6B6B; }
 .box-border-2 { border-top: 5px solid #FFD166; }
 .box-border-3 { border-top: 5px solid #06D6A0; }

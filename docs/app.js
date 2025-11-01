@@ -2,12 +2,20 @@ import { GitHubManager } from './github.js';
 import { UIManager } from './ui.js';
 import { CRUDManager } from './crud.js';
 
-class LeitnerApp {
-    constructor() {
+export class LeitnerApp {
+    constructor(options = {}) {
         this.github = new GitHubManager();
         this.ui = new UIManager();
         this.crud = new CRUDManager();
-        
+
+        /**
+         * Tab router instance enabling navigation between application sections.
+         * Stored for future interactions (e.g. forcing the review tab to open after
+         * specific actions). Phase 1 only keeps a reference without additional logic
+         * to avoid side effects on existing behaviour.
+         */
+        this.tabRouter = options.tabRouter || null;
+
         this.flashcards = [];
         this.currentCSV = 'default';
         this.currentCard = null;
@@ -148,9 +156,13 @@ class LeitnerApp {
     }
     
     createBoxes() {
-        const boxesContainer = document.querySelector('.grid.grid-cols-1.sm\\:grid-cols-2.md\\:grid-cols-3.lg\\:grid-cols-5.gap-4.mb-6');
+        const boxesContainer = document.getElementById('leitner-boxes');
+        if (!boxesContainer) {
+            console.warn('Leitner boxes container not found in DOM.');
+            return;
+        }
         boxesContainer.innerHTML = '';
-        
+
         for (let i = 1; i <= 5; i++) {
             const box = document.createElement('div');
             box.className = `box box-border-${i} bg-white rounded-lg shadow-md p-4 text-center cursor-pointer hover:-translate-y-1 transition-transform`;
@@ -338,7 +350,5 @@ class LeitnerApp {
     }
 }
 
-// Démarrer l'application
-document.addEventListener('DOMContentLoaded', () => {
-    window.leitnerApp = new LeitnerApp();
-});
+// Bootstrap moved to src/main.js to centralise navigation + app initialisation.
+
