@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Éditeur CSV plein écran</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+            --bg: #f4f6fb;
+            --text: #1f2933;
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --border: #dce2f2;
+            --muted: #6b7280;
+            --danger: #dc2626;
+            --success: #047857;
+            --card-bg: #ffffff;
+            --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Inter", "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 100%);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.15), transparent 60%);
+            padding: 2.5rem clamp(1.5rem, 5vw, 3.5rem) 1.5rem;
+            border-bottom: 1px solid rgba(37, 99, 235, 0.08);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: clamp(2rem, 5vw, 2.8rem);
+            letter-spacing: -0.02em;
+        }
+
+        header p {
+            max-width: 920px;
+            line-height: 1.6;
+            color: var(--muted);
+            font-size: 1.05rem;
+        }
+
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+            gap: clamp(1rem, 3vw, 2rem);
+            padding: 1.5rem clamp(1.2rem, 4vw, 3.5rem) 3rem;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 20px;
+            padding: clamp(1rem, 3vw, 1.6rem);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .panel h2 {
+            margin: 0;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .panel h2 span.icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            background: rgba(37, 99, 235, 0.12);
+            display: grid;
+            place-items: center;
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .instructions-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: grid;
+            gap: 0.75rem;
+            font-size: 0.95rem;
+        }
+
+        .instructions-list li {
+            background: rgba(37, 99, 235, 0.05);
+            border-radius: 14px;
+            padding: 0.85rem 1rem;
+            border: 1px solid rgba(37, 99, 235, 0.12);
+        }
+
+        .instructions-list strong {
+            display: block;
+            margin-bottom: 0.35rem;
+            font-size: 0.92rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--primary);
+        }
+
+        .config-form {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .config-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        label {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .config-field input {
+            padding: 0.65rem 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .config-field input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+            outline: none;
+        }
+
+        .config-preview {
+            font-size: 0.85rem;
+            color: var(--muted);
+            background: rgba(148, 163, 184, 0.14);
+            padding: 0.65rem 0.75rem;
+            border-radius: 10px;
+            word-break: break-all;
+        }
+
+        .image-library {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .image-dropzone {
+            border: 2px dashed rgba(37, 99, 235, 0.3);
+            border-radius: 16px;
+            padding: 1rem;
+            text-align: center;
+            background: rgba(37, 99, 235, 0.08);
+            color: var(--primary);
+            cursor: pointer;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .image-dropzone:hover,
+        .image-dropzone:focus {
+            border-color: var(--primary);
+            background: rgba(37, 99, 235, 0.12);
+        }
+
+        .image-dropzone.active {
+            border-color: var(--primary-dark);
+            background: rgba(37, 99, 235, 0.18);
+        }
+
+        .image-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 0.75rem;
+            max-height: 280px;
+            overflow-y: auto;
+            padding-right: 0.25rem;
+        }
+
+        .image-card {
+            background: var(--card-bg);
+            border-radius: 14px;
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            padding: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.45rem;
+            box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+        }
+
+        .image-card img {
+            width: 100%;
+            border-radius: 10px;
+            object-fit: cover;
+            aspect-ratio: 1/1;
+        }
+
+        .image-card span {
+            font-size: 0.78rem;
+            text-align: center;
+            word-break: break-all;
+        }
+
+        .editor-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .editor-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .editor-actions button,
+        .editor-actions label[for="importCsv"] {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1.1rem;
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            box-shadow: 0 12px 24px rgba(37, 99, 235, 0.25);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .editor-actions button:hover,
+        .editor-actions label[for="importCsv"]:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 16px 30px rgba(37, 99, 235, 0.25);
+        }
+
+        .editor-actions button.secondary {
+            background: rgba(37, 99, 235, 0.12);
+            color: var(--primary);
+            box-shadow: none;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 18px;
+            overflow: hidden;
+        }
+
+        thead {
+            background: rgba(37, 99, 235, 0.12);
+        }
+
+        th {
+            text-align: left;
+            padding: 0.85rem;
+            font-size: 0.9rem;
+            letter-spacing: 0.03em;
+        }
+
+        td {
+            padding: 0.6rem 0.75rem;
+            vertical-align: top;
+        }
+
+        tbody tr:nth-child(even) {
+            background: rgba(37, 99, 235, 0.04);
+        }
+
+        textarea.field,
+        input.field,
+        input[type="date"],
+        input[type="number"] {
+            width: 100%;
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            border-radius: 10px;
+            padding: 0.5rem 0.6rem;
+            font-size: 0.92rem;
+            resize: vertical;
+            min-height: 45px;
+            transition: border 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        textarea.field:focus,
+        input.field:focus,
+        input[type="date"]:focus,
+        input[type="number"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+            outline: none;
+        }
+
+        .image-selector {
+            display: grid;
+            gap: 0.4rem;
+        }
+
+        .image-selector__preview {
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: 10px;
+            padding: 0.4rem;
+            background: rgba(255, 255, 255, 0.85);
+            min-height: 60px;
+            display: grid;
+            place-items: center;
+            color: var(--muted);
+            font-size: 0.8rem;
+            text-align: center;
+        }
+
+        .image-selector__preview img {
+            max-width: 100%;
+            max-height: 120px;
+            border-radius: 8px;
+            object-fit: contain;
+        }
+
+        .image-selector__input.invalid {
+            border-color: var(--danger);
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
+        }
+
+        .delete-row {
+            background: transparent;
+            color: var(--danger);
+            border: 1px solid rgba(220, 38, 38, 0.4);
+            border-radius: 10px;
+            padding: 0.35rem 0.75rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .status {
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            display: none;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .status.visible {
+            display: inline-flex;
+        }
+
+        .status.success {
+            background: rgba(4, 120, 87, 0.12);
+            color: var(--success);
+        }
+
+        .status.error {
+            background: rgba(220, 38, 38, 0.12);
+            color: var(--danger);
+        }
+
+        .status.warning {
+            background: rgba(217, 119, 6, 0.12);
+            color: #b45309;
+        }
+
+        .tooltip {
+            text-decoration: underline dotted;
+            cursor: help;
+        }
+
+        .import-input {
+            display: none;
+        }
+
+        .helper-text {
+            font-size: 0.82rem;
+            color: var(--muted);
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+        }
+
+        @media (max-width: 1100px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+
+            header {
+                text-align: center;
+            }
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0f172a;
+                --text: #f8fafc;
+                --primary: #60a5fa;
+                --primary-dark: #3b82f6;
+                --border: rgba(148, 163, 184, 0.5);
+                --muted: #cbd5f5;
+                --danger: #f87171;
+                --success: #34d399;
+                --card-bg: rgba(15, 23, 42, 0.9);
+                --shadow: 0 12px 40px rgba(15, 23, 42, 0.55);
+            }
+
+            body {
+                background: linear-gradient(180deg, #0b1120 0%, #111827 100%);
+            }
+
+            .panel,
+            table {
+                background: rgba(17, 24, 39, 0.88);
+            }
+
+            .image-card {
+                background: rgba(15, 23, 42, 0.88);
+            }
+
+            .image-selector__preview {
+                background: rgba(15, 23, 42, 0.72);
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Éditeur CSV dédié aux cartes Leitner</h1>
+        <p>
+            Gérez vos questions, réponses et images en respectant la structure du repository. Cette interface pleine page
+            vous guide pour charger vos ressources, configurer votre dépôt GitHub et exporter un fichier CSV conforme avec
+            les liens <code>raw.githubusercontent.com</code> générés automatiquement.
+        </p>
+    </header>
+    <main>
+        <aside class="panel" aria-labelledby="instructions-title">
+            <h2 id="instructions-title"><span class="icon">①</span> Instructions essentielles</h2>
+            <ul class="instructions-list">
+                <li>
+                    <strong>Organisation locale</strong>
+                    Placez vos images de <span class="tooltip" title="Utilisées pour illustrer les questions">questions</span>
+                    dans <code>images_questions/</code> et vos images de
+                    <span class="tooltip" title="Illustrations accompagnant les réponses">réponses</span> dans <code>images_reponses/</code>.
+                </li>
+                <li>
+                    <strong>Structure recommandée</strong>
+                    Exemple : <code>images_questions/mon-theme_question-01.jpg</code> et
+                    <code>images_reponses/mon-theme_reponse-01.jpg</code> afin de garder des couples facilement identifiables.
+                </li>
+                <li>
+                    <strong>Chargement</strong>
+                    Importez vos images locales pour obtenir un aperçu et les proposer dans les listes déroulantes.
+                </li>
+                <li>
+                    <strong>Export</strong>
+                    Vérifiez votre configuration GitHub. L’export génère des liens complets
+                    <code>https://raw.githubusercontent.com/&lt;utilisateur&gt;/&lt;repo&gt;/&lt;branche&gt;/images_questions/&lt;fichier&gt;</code>.
+                </li>
+                <li>
+                    <strong>Aide</strong>
+                    Survolez les termes soulignés pour obtenir une explication. Des messages d’erreur s’affichent si une image
+                    référencée est introuvable.
+                </li>
+            </ul>
+            <section class="panel" aria-labelledby="config-title">
+                <h2 id="config-title"><span class="icon">②</span> Configuration GitHub</h2>
+                <form class="config-form" id="configForm">
+                    <div class="config-field">
+                        <label for="githubUser">Nom d’utilisateur GitHub</label>
+                        <input id="githubUser" name="githubUser" data-config="username" placeholder="ex. octocat" required>
+                    </div>
+                    <div class="config-field">
+                        <label for="githubRepo">Nom du repository</label>
+                        <input id="githubRepo" name="githubRepo" data-config="repository" placeholder="ex. leitner-cards" required>
+                    </div>
+                    <div class="config-field">
+                        <label for="githubBranch">Branche (par défaut : main)</label>
+                        <input id="githubBranch" name="githubBranch" data-config="branch" value="main" required>
+                    </div>
+                </form>
+                <div class="config-preview" id="linkPreview">https://raw.githubusercontent.com/USERNAME/REPO/BRANCH/images_questions/fichier.png</div>
+                <p class="helper-text">La configuration est enregistrée automatiquement dans votre navigateur (localStorage).</p>
+            </section>
+            <section class="panel" aria-labelledby="library-title">
+                <h2 id="library-title"><span class="icon">③</span> Bibliothèque d’images</h2>
+                <div class="image-library">
+                    <div>
+                        <label class="image-dropzone" tabindex="0" for="questionLibrary">
+                            <strong>Ajouter des images de questions</strong><br>
+                            Cliquez ou déposez vos fichiers du dossier <code>images_questions/</code>
+                        </label>
+                        <input id="questionLibrary" class="import-input" type="file" accept="image/*" multiple>
+                        <div class="image-list" id="questionGallery" aria-live="polite"></div>
+                    </div>
+                    <div>
+                        <label class="image-dropzone" tabindex="0" for="answerLibrary">
+                            <strong>Ajouter des images de réponses</strong><br>
+                            Cliquez ou déposez vos fichiers du dossier <code>images_reponses/</code>
+                        </label>
+                        <input id="answerLibrary" class="import-input" type="file" accept="image/*" multiple>
+                        <div class="image-list" id="answerGallery" aria-live="polite"></div>
+                    </div>
+                </div>
+            </section>
+        </aside>
+        <section class="panel editor-panel" aria-labelledby="editor-title">
+            <div>
+                <h2 id="editor-title"><span class="icon">④</span> Édition des cartes</h2>
+                <p class="helper-text">Complétez vos questions et réponses, choisissez une image grâce aux listes de suggestions.
+                    Un aperçu miniature est généré automatiquement.</p>
+            </div>
+            <div class="editor-actions">
+                <button type="button" id="addRow" title="Ajouter une nouvelle carte">➕ Ajouter une carte</button>
+                <label for="importCsv" class="secondary" title="Importer un fichier CSV existant">📥 Importer un CSV</label>
+                <input id="importCsv" class="import-input" type="file" accept="text/csv">
+                <button type="button" id="exportCsv" title="Générer un fichier CSV encodé en UTF-8">💾 Exporter le CSV</button>
+                <span class="status" id="statusMessage" role="status" aria-live="polite"></span>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Question</th>
+                            <th>Image question</th>
+                            <th>Réponse</th>
+                            <th>Image réponse</th>
+                            <th>Boîte</th>
+                            <th>Dernière révision</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cardsBody"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+    <datalist id="questionImagesList"></datalist>
+    <datalist id="answerImagesList"></datalist>
+    <script>
+        const state = {
+            config: {
+                username: '',
+                repository: '',
+                branch: 'main'
+            },
+            questionImages: new Map(),
+            answerImages: new Map()
+        };
+
+        const STORAGE_KEY = 'leitner-editor-config';
+        const HEADER = ['question_content', 'question_content_image', 'answer_content', 'answer_content_image', 'box_number', 'last_reviewed'];
+
+        const configForm = document.getElementById('configForm');
+        const linkPreview = document.getElementById('linkPreview');
+        const questionGallery = document.getElementById('questionGallery');
+        const answerGallery = document.getElementById('answerGallery');
+        const questionDatalist = document.getElementById('questionImagesList');
+        const answerDatalist = document.getElementById('answerImagesList');
+        const statusMessage = document.getElementById('statusMessage');
+        const cardsBody = document.getElementById('cardsBody');
+
+        function escapeCsvValue(value) {
+            if (value === undefined || value === null) {
+                return '';
+            }
+            const stringValue = String(value);
+            if (/[",\n]/.test(stringValue)) {
+                return '"' + stringValue.replace(/"/g, '""') + '"';
+            }
+            return stringValue;
+        }
+
+        function parseCsvLine(line) {
+            const values = [];
+            let buffer = '';
+            let insideQuotes = false;
+            for (let i = 0; i < line.length; i += 1) {
+                const char = line[i];
+                if (char === '"') {
+                    if (insideQuotes && line[i + 1] === '"') {
+                        buffer += '"';
+                        i += 1;
+                    } else {
+                        insideQuotes = !insideQuotes;
+                    }
+                } else if (char === ',' && !insideQuotes) {
+                    values.push(buffer);
+                    buffer = '';
+                } else {
+                    buffer += char;
+                }
+            }
+            values.push(buffer);
+            return values.map((value) => value.trim());
+        }
+
+        function normaliseImageValue(value) {
+            if (!value) {
+                return '';
+            }
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return '';
+            }
+            try {
+                const parsed = new URL(trimmed);
+                if (parsed.hostname === 'raw.githubusercontent.com') {
+                    const segments = parsed.pathname.split('/');
+                    const filename = segments[segments.length - 1];
+                    return decodeURIComponent(filename);
+                }
+            } catch (error) {
+                // Laisser la valeur telle quelle lorsqu'elle n'est pas une URL valide
+            }
+            return trimmed;
+        }
+
+        function parseCsv(text) {
+            const rows = [];
+            const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+            if (!lines.length) {
+                return rows;
+            }
+            const headers = parseCsvLine(lines[0]);
+            const headerIndex = HEADER.reduce((acc, key) => {
+                acc[key] = headers.indexOf(key);
+                return acc;
+            }, {});
+
+            for (let i = 1; i < lines.length; i += 1) {
+                const values = parseCsvLine(lines[i]);
+                const entry = {
+                    question: values[headerIndex.question_content] || '',
+                    questionImage: normaliseImageValue(values[headerIndex.question_content_image]),
+                    answer: values[headerIndex.answer_content] || '',
+                    answerImage: normaliseImageValue(values[headerIndex.answer_content_image]),
+                    box: values[headerIndex.box_number] || '',
+                    lastReview: values[headerIndex.last_reviewed] || ''
+                };
+                rows.push(entry);
+            }
+            return rows;
+        }
+
+        function storeConfig() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state.config));
+        }
+
+        function loadConfig() {
+            try {
+                const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+                if (stored && typeof stored === 'object') {
+                    state.config = Object.assign({}, state.config, stored);
+                }
+            } catch (error) {
+                console.warn('Impossible de charger la configuration', error);
+            }
+            configForm.querySelectorAll('input[data-config]').forEach((input) => {
+                const key = input.dataset.config;
+                if (state.config[key]) {
+                    input.value = state.config[key];
+                }
+            });
+            updateLinkPreview();
+        }
+
+        function updateLinkPreview() {
+            const { username, repository, branch } = state.config;
+            const base = 'https://raw.githubusercontent.com/';
+            if (!username || !repository || !branch) {
+                linkPreview.textContent = base + 'USERNAME/REPO/BRANCH/images_questions/fichier.png';
+                return;
+            }
+            const example = `${base}${username}/${repository}/${branch}/images_questions/exemple.png`;
+            linkPreview.textContent = example;
+        }
+
+        function buildRemoteUrl(type, filename) {
+            if (!filename) {
+                return '';
+            }
+            const { username, repository, branch } = state.config;
+            if (!username || !repository || !branch) {
+                return '';
+            }
+            const folder = type === 'question' ? 'images_questions' : 'images_reponses';
+            return `https://raw.githubusercontent.com/${encodeURIComponent(username)}/${encodeURIComponent(repository)}/${encodeURIComponent(branch)}/${folder}/${encodeURIComponent(filename).replace(/%2F/g, '/')}`;
+        }
+
+        function showStatus(type, message) {
+            statusMessage.className = `status visible ${type}`;
+            statusMessage.textContent = message;
+        }
+
+        function clearStatus() {
+            statusMessage.className = 'status';
+            statusMessage.textContent = '';
+        }
+
+        function createImageCard(file, container) {
+            const card = document.createElement('div');
+            card.className = 'image-card';
+            const img = document.createElement('img');
+            img.src = file.previewUrl;
+            img.alt = `Aperçu ${file.name}`;
+            const caption = document.createElement('span');
+            caption.textContent = file.name;
+            card.append(img, caption);
+            container.append(card);
+        }
+
+        function updateImageGallery(type) {
+            const map = type === 'question' ? state.questionImages : state.answerImages;
+            const container = type === 'question' ? questionGallery : answerGallery;
+            container.innerHTML = '';
+            Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name)).forEach((file) => {
+                createImageCard(file, container);
+            });
+        }
+
+        function refreshDatalist(type) {
+            const map = type === 'question' ? state.questionImages : state.answerImages;
+            const datalist = type === 'question' ? questionDatalist : answerDatalist;
+            datalist.innerHTML = '';
+            Array.from(map.keys()).sort((a, b) => a.localeCompare(b)).forEach((name) => {
+                const option = document.createElement('option');
+                option.value = name;
+                datalist.append(option);
+            });
+        }
+
+        function handleFiles(list, type) {
+            const map = type === 'question' ? state.questionImages : state.answerImages;
+            map.forEach((entry) => {
+                URL.revokeObjectURL(entry.previewUrl);
+            });
+            map.clear();
+            Array.from(list).forEach((file) => {
+                if (!file.type.startsWith('image/')) {
+                    return;
+                }
+                const entry = {
+                    name: file.name,
+                    file,
+                    previewUrl: URL.createObjectURL(file)
+                };
+                map.set(file.name, entry);
+            });
+            updateImageGallery(type);
+            refreshDatalist(type);
+            updateRowImageInputs(type);
+            const count = map.size;
+            showStatus('success', `${count} image${count > 1 ? 's' : ''} ${type === 'question' ? 'question' : 'réponse'} chargée${count > 1 ? 's' : ''}.`);
+        }
+
+        function updateRowImageInputs(type) {
+            const selector = type === 'question' ? '[data-field="questionImage"]' : '[data-field="answerImage"]';
+            cardsBody.querySelectorAll(selector).forEach((input) => {
+                updateImagePreview(input, type);
+            });
+        }
+
+        function updateImagePreview(input, type) {
+            const filename = input.value.trim();
+            const map = type === 'question' ? state.questionImages : state.answerImages;
+            const preview = input.closest('.image-selector').querySelector('.image-selector__preview');
+            preview.innerHTML = '';
+            input.classList.remove('invalid');
+            if (!filename) {
+                preview.textContent = 'Aucune image sélectionnée';
+                return;
+            }
+            if (map.has(filename)) {
+                const img = document.createElement('img');
+                img.src = map.get(filename).previewUrl;
+                img.alt = `Aperçu ${filename}`;
+                preview.append(img);
+                return;
+            }
+            const remoteUrl = buildRemoteUrl(type, filename);
+            if (!remoteUrl) {
+                input.classList.add('invalid');
+                preview.textContent = 'Configurez GitHub pour vérifier ce fichier.';
+                return;
+            }
+            preview.textContent = 'Chargement depuis GitHub…';
+            const img = document.createElement('img');
+            img.src = remoteUrl;
+            img.alt = `Prévisualisation distante pour ${filename}`;
+            img.addEventListener('error', () => {
+                input.classList.add('invalid');
+                preview.textContent = 'Image introuvable sur GitHub.';
+            }, { once: true });
+            img.addEventListener('load', () => {
+                preview.innerHTML = '';
+                input.classList.remove('invalid');
+                preview.append(img);
+            }, { once: true });
+        }
+
+        function addRow(data = {}) {
+            const tr = document.createElement('tr');
+            tr.className = 'card-row';
+            tr.innerHTML = `
+                <td>
+                    <textarea class="field" data-field="question" placeholder="Texte de la question" title="Saisissez l'énoncé de la question" rows="3">${data.question ? data.question : ''}</textarea>
+                </td>
+                <td>
+                    <div class="image-selector" title="Sélectionnez ou saisissez le nom d'image présent dans images_questions/">
+                        <input class="field image-selector__input" data-field="questionImage" list="questionImagesList" placeholder="nom-fichier-question.jpg" value="${data.questionImage ? data.questionImage : ''}">
+                        <div class="image-selector__preview">Aucune image sélectionnée</div>
+                    </div>
+                </td>
+                <td>
+                    <textarea class="field" data-field="answer" placeholder="Texte de la réponse" title="Ajoutez la réponse associée" rows="3">${data.answer ? data.answer : ''}</textarea>
+                </td>
+                <td>
+                    <div class="image-selector" title="Sélectionnez ou saisissez le nom d'image présent dans images_reponses/">
+                        <input class="field image-selector__input" data-field="answerImage" list="answerImagesList" placeholder="nom-fichier-reponse.jpg" value="${data.answerImage ? data.answerImage : ''}">
+                        <div class="image-selector__preview">Aucune image sélectionnée</div>
+                    </div>
+                </td>
+                <td>
+                    <input class="field" data-field="box" type="number" min="1" placeholder="1" value="${data.box ? data.box : ''}" title="Numéro de boîte Leitner">
+                </td>
+                <td>
+                    <input class="field" data-field="lastReview" type="date" value="${data.lastReview ? data.lastReview : ''}" title="Date de dernière révision">
+                </td>
+                <td>
+                    <button type="button" class="delete-row" title="Supprimer cette carte">Supprimer</button>
+                </td>
+            `;
+            cardsBody.append(tr);
+            const questionInput = tr.querySelector('[data-field="questionImage"]');
+            const answerInput = tr.querySelector('[data-field="answerImage"]');
+            updateImagePreview(questionInput, 'question');
+            updateImagePreview(answerInput, 'answer');
+        }
+
+        function gatherRows() {
+            const rows = [];
+            cardsBody.querySelectorAll('tr.card-row').forEach((row) => {
+                rows.push({
+                    question: row.querySelector('[data-field="question"]').value.trim(),
+                    questionImage: row.querySelector('[data-field="questionImage"]').value.trim(),
+                    answer: row.querySelector('[data-field="answer"]').value.trim(),
+                    answerImage: row.querySelector('[data-field="answerImage"]').value.trim(),
+                    box: row.querySelector('[data-field="box"]').value.trim(),
+                    lastReview: row.querySelector('[data-field="lastReview"]').value.trim()
+                });
+            });
+            return rows;
+        }
+
+        function validateRows(rows) {
+            const errors = [];
+            rows.forEach((row, index) => {
+                const number = index + 1;
+                if (!row.question) {
+                    errors.push(`Ligne ${number} : la question est vide.`);
+                }
+                if (!row.answer) {
+                    errors.push(`Ligne ${number} : la réponse est vide.`);
+                }
+                if (row.questionImage && !state.questionImages.has(row.questionImage)) {
+                    errors.push(`Ligne ${number} : l'image question "${row.questionImage}" n'a pas été chargée.`);
+                }
+                if (row.answerImage && !state.answerImages.has(row.answerImage)) {
+                    errors.push(`Ligne ${number} : l'image réponse "${row.answerImage}" n'a pas été chargée.`);
+                }
+            });
+            return errors;
+        }
+
+        function downloadCsv(content) {
+            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const now = new Date();
+            const timestamp = now.toISOString().split('T')[0];
+            link.download = `cartes-leitner-${timestamp}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        function handleExport() {
+            clearStatus();
+            const { username, repository, branch } = state.config;
+            if (!username || !repository || !branch) {
+                showStatus('error', 'Complétez la configuration GitHub avant l\'export.');
+                return;
+            }
+            const rows = gatherRows();
+            if (!rows.length) {
+                showStatus('warning', 'Ajoutez au moins une carte avant d\'exporter.');
+                return;
+            }
+            const errors = validateRows(rows);
+            if (errors.length) {
+                showStatus('error', errors.join(' '));
+                return;
+            }
+            const csvLines = [HEADER.join(',')];
+            rows.forEach((row) => {
+                const questionImageUrl = row.questionImage ? buildRemoteUrl('question', row.questionImage) : '';
+                const answerImageUrl = row.answerImage ? buildRemoteUrl('answer', row.answerImage) : '';
+                csvLines.push([
+                    escapeCsvValue(row.question),
+                    escapeCsvValue(questionImageUrl),
+                    escapeCsvValue(row.answer),
+                    escapeCsvValue(answerImageUrl),
+                    escapeCsvValue(row.box),
+                    escapeCsvValue(row.lastReview)
+                ].join(','));
+            });
+            const content = csvLines.join('\r\n');
+            downloadCsv(content);
+            showStatus('success', 'Export CSV réussi : les liens ont été générés avec succès.');
+        }
+
+        function handleCsvImport(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (loadEvent) => {
+                try {
+                    const rows = parseCsv(loadEvent.target.result);
+                    cardsBody.innerHTML = '';
+                    rows.forEach((row) => addRow(row));
+                    showStatus('success', `${rows.length} ligne${rows.length > 1 ? 's' : ''} importée${rows.length > 1 ? 's' : ''}.`);
+                } catch (error) {
+                    console.error(error);
+                    showStatus('error', 'Impossible de lire ce fichier CSV. Vérifiez son format.');
+                }
+            };
+            reader.onerror = () => {
+                showStatus('error', 'Erreur lors de la lecture du fichier CSV.');
+            };
+            reader.readAsText(file, 'utf-8');
+            event.target.value = '';
+        }
+
+        configForm.addEventListener('input', (event) => {
+            const input = event.target;
+            if (input.dataset.config) {
+                state.config[input.dataset.config] = input.value.trim();
+                updateLinkPreview();
+                storeConfig();
+                updateRowImageInputs('question');
+                updateRowImageInputs('answer');
+            }
+        });
+
+        document.getElementById('questionLibrary').addEventListener('change', (event) => {
+            handleFiles(event.target.files, 'question');
+        });
+
+        document.getElementById('answerLibrary').addEventListener('change', (event) => {
+            handleFiles(event.target.files, 'answer');
+        });
+
+        function setupDropzone(label, type) {
+            label.addEventListener('dragover', (event) => {
+                event.preventDefault();
+                label.classList.add('active');
+            });
+            label.addEventListener('dragleave', () => {
+                label.classList.remove('active');
+            });
+            label.addEventListener('drop', (event) => {
+                event.preventDefault();
+                label.classList.remove('active');
+                handleFiles(event.dataTransfer.files, type);
+            });
+        }
+
+        setupDropzone(document.querySelector('label[for="questionLibrary"]'), 'question');
+        setupDropzone(document.querySelector('label[for="answerLibrary"]'), 'answer');
+
+        cardsBody.addEventListener('input', (event) => {
+            const target = event.target;
+            if (target.matches('[data-field="questionImage"]')) {
+                const cleaned = normaliseImageValue(target.value);
+                if (cleaned !== target.value) {
+                    target.value = cleaned;
+                }
+                updateImagePreview(target, 'question');
+            }
+            if (target.matches('[data-field="answerImage"]')) {
+                const cleaned = normaliseImageValue(target.value);
+                if (cleaned !== target.value) {
+                    target.value = cleaned;
+                }
+                updateImagePreview(target, 'answer');
+            }
+        });
+
+        cardsBody.addEventListener('click', (event) => {
+            if (event.target.matches('.delete-row')) {
+                event.target.closest('tr').remove();
+                showStatus('warning', 'Carte supprimée.');
+            }
+        });
+
+        document.getElementById('addRow').addEventListener('click', () => {
+            addRow();
+            showStatus('success', 'Nouvelle carte ajoutée.');
+        });
+
+        document.getElementById('exportCsv').addEventListener('click', handleExport);
+        document.getElementById('importCsv').addEventListener('change', handleCsvImport);
+
+        window.addEventListener('beforeunload', () => {
+            state.questionImages.forEach((entry) => URL.revokeObjectURL(entry.previewUrl));
+            state.answerImages.forEach((entry) => URL.revokeObjectURL(entry.previewUrl));
+        });
+
+        loadConfig();
+        addRow();
+    </script>
+</body>
+</html>
