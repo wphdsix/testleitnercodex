@@ -458,6 +458,9 @@ export class LeitnerApp {
 
         const githubGuideModal = document.getElementById('github-guide-modal');
         const openGithubGuide = document.getElementById('open-github-guide');
+        const beginnerGithubGuide = document.getElementById('beginner-guide-btn');
+        const closeGithubGuide = document.getElementById('close-github-guide');
+        let lastGithubGuideTrigger = null;
         const closeGithubGuide = document.getElementById('close-github-guide');
 
         const hideGithubGuide = () => {
@@ -466,6 +469,7 @@ export class LeitnerApp {
             }
             githubGuideModal.classList.add('hidden');
             githubGuideModal.setAttribute('aria-hidden', 'true');
+            (lastGithubGuideTrigger || openGithubGuide || beginnerGithubGuide)?.focus();
             openGithubGuide?.focus();
         };
 
@@ -482,6 +486,14 @@ export class LeitnerApp {
         openGithubGuide?.addEventListener('click', (event) => {
             event.preventDefault();
             this.saveConfig();
+            lastGithubGuideTrigger = event.currentTarget;
+            showGithubGuide();
+        });
+
+        beginnerGithubGuide?.addEventListener('click', (event) => {
+            event.preventDefault();
+            this.saveConfig();
+            lastGithubGuideTrigger = event.currentTarget;
             showGithubGuide();
         });
 
