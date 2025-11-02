@@ -18,6 +18,13 @@
             <p class="text-gray-600">Par OM en 2025.09.03</p>            
         </header>
 
+        <div class="beginner-guide-banner" role="region" aria-label="Guide pour débutant">
+            <p class="beginner-guide-text">Besoin d'aide pour configurer votre GitHub&nbsp;? Suivez notre guide pas à pas.</p>
+            <button id="beginner-guide-btn" class="beginner-guide-button" type="button">
+                🧭 Guide pour débutant
+            </button>
+        </div>
+
         <div class="tab-container">
             <nav class="tab-nav" role="tablist" aria-label="Navigation principale">
                 <button id="tab-review-trigger" class="tab-button" role="tab" aria-selected="false" aria-controls="tab-review" data-tab-target="review">
@@ -237,9 +244,14 @@
                                         <p class="text-xs text-gray-500 mt-1">Nécessaire seulement pour les dépôts privés</p>
                                     </div>
                                 </div>
-                                <button id="load-github-csv" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-                                    Charger les fichiers depuis GitHub
-                                </button>
+                                <div class="github-config__actions">
+                                    <button id="load-github-csv" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                                        Charger les fichiers depuis GitHub
+                                    </button>
+                                    <button id="open-github-guide" class="bg-slate-700 text-white px-4 py-2 rounded hover:bg-slate-800">
+                                        📘 Explication du processus
+                                    </button>
+                                </div>
                             </div>
 
                             <!-- Intervalles de révision -->
@@ -345,6 +357,104 @@
                     <div id="csv-inline-editor" class="csv-inline-editor__wrapper" aria-live="polite"></div>
                 </div>
             </section>
+        </div>
+
+        <!-- Guide GitHub -->
+        <div id="github-guide-modal" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="github-guide-title" aria-hidden="true" tabindex="-1">
+            <div class="github-guide__dialog" role="document">
+                <div class="github-guide__header">
+                    <h3 id="github-guide-title" class="text-xl font-bold">Comprendre et configurer son GitHub personnel</h3>
+                    <button id="close-github-guide" class="github-guide__close" aria-label="Fermer le guide">
+                        ✕
+                    </button>
+                </div>
+                <div class="github-guide__body">
+                    <p class="github-guide__intro">
+                        Ce guide détaille pas à pas la création de votre compte GitHub, la connexion, la réalisation d'un fork du projet et la configuration des champs ci-dessus. Chaque étape est pensée pour un public débutant : prenez votre temps, suivez l'ordre proposé et insérez vos propres captures dans les emplacements prévus pour conserver un mémo visuel.
+                    </p>
+
+                    <section class="github-guide__step">
+                        <h4 class="github-guide__step-title">1. Créer un compte GitHub</h4>
+                        <ol class="github-guide__list">
+                            <li>Ouvrez votre navigateur et rendez-vous sur <strong><a href="https://github.com" target="_blank" rel="noopener">github.com</a></strong>.</li>
+                            <li>Cliquez sur <strong>Sign&nbsp;up</strong> (Inscription), indiquez votre e-mail, choisissez un mot de passe sécurisé puis validez l'envoi du code de vérification.</li>
+                            <li>Renseignez votre nom d'utilisateur GitHub. Ce sera le «&nbsp;propriétaire du dépôt&nbsp;» à saisir dans l'application.</li>
+                            <li>Finalisez l'inscription en acceptant les conditions d'utilisation et en vérifiant votre adresse e-mail via le code reçu.</li>
+                        </ol>
+                        <div class="github-guide__image-wrapper" data-guide-image="images_guides/github-step1.png" data-guide-alt="Formulaire d'inscription GitHub" data-guide-label="github-step1.png"></div>
+                    </section>
+
+                    <section class="github-guide__step">
+                        <h4 class="github-guide__step-title">2. Se connecter à son compte</h4>
+                        <ol class="github-guide__list">
+                            <li>Retournez sur <strong>github.com</strong> et cliquez sur <strong>Sign&nbsp;in</strong> (Connexion).</li>
+                            <li>Saisissez l'e-mail et le mot de passe créés à l'étape précédente.</li>
+                            <li>Activez l'authentification à deux facteurs si GitHub vous le propose&nbsp;: cela renforce la sécurité de votre compte.</li>
+                            <li>Une fois connecté, vérifiez que votre avatar apparaît en haut à droite&nbsp;: cela confirme que vous êtes bien dans votre espace personnel.</li>
+                        </ol>
+                        <div class="github-guide__image-wrapper" data-guide-image="images_guides/github-step2.png" data-guide-alt="Connexion à GitHub" data-guide-label="github-step2.png"></div>
+                    </section>
+
+                    <section class="github-guide__step">
+                        <h4 class="github-guide__step-title">3. Forker le projet</h4>
+                        <ol class="github-guide__list">
+                            <li>Depuis la page du dépôt principal du projet, cliquez sur le bouton <strong>Fork</strong> situé en haut à droite.</li>
+                            <li>GitHub vous demande de confirmer le nom du dépôt de destination. Conservez le nom proposé ou personnalisez-le, puis validez.</li>
+                            <li>Patientez quelques secondes pendant la copie du dépôt dans votre espace personnel.</li>
+                            <li>À la fin du processus, vous basculez automatiquement sur votre copie&nbsp;: l'en-tête de la page doit afficher <code>votre-nom-utilisateur/nom-du-dépôt</code>.</li>
+                        </ol>
+                        <div class="github-guide__callout">
+                            Astuce&nbsp;: le fork est votre espace de travail. Vous pouvez y ajouter vos cartes, images ou textes sans impacter le dépôt original.
+                        </div>
+                        <div class="github-guide__image-wrapper" data-guide-image="images_guides/github-step3.png" data-guide-alt="Bouton Fork sur GitHub" data-guide-label="github-step3.png"></div>
+                    </section>
+
+                    <section class="github-guide__step">
+                        <h4 class="github-guide__step-title">4. Explorer son fork</h4>
+                        <ol class="github-guide__list">
+                            <li>Dans votre fork, utilisez le bouton <strong>Add file &gt; Upload files</strong> pour ajouter des images ou des CSV personnels si nécessaire.</li>
+                            <li>Repérez la barre d'adresse de votre navigateur&nbsp;: elle contient l'URL complète de votre dépôt, par exemple <code>https://github.com/votre-nom-utilisateur/leitexp</code>.</li>
+                            <li>Notez les dossiers utilisés par l'application&nbsp;: par défaut les fichiers se trouvent dans <code>docs/</code>, mais vous pouvez créer vos propres dossiers si vous en déclarez le chemin.</li>
+                            <li>Vérifiez que les fichiers indispensables (CSV, images) sont bien présents avant de passer à la configuration dans l'application.</li>
+                        </ol>
+                        <div class="github-guide__image-wrapper" data-guide-image="images_guides/github-step4.png" data-guide-alt="Exploration du dépôt GitHub" data-guide-label="github-step4.png"></div>
+                    </section>
+
+                    <section class="github-guide__step">
+                        <h4 class="github-guide__step-title">5. Configurer l'application depuis le panneau administrateur</h4>
+                        <ol class="github-guide__list">
+                            <li>Ouvrez le menu administrateur (icône ⚙️ en bas à droite) puis repérez la section <strong>Configuration GitHub</strong>.</li>
+                            <li>Renseignez <strong>Propriétaire du dépôt</strong> avec votre nom d'utilisateur GitHub.</li>
+                            <li>Indiquez <strong>Nom du dépôt</strong> tel qu'il apparaît sur votre fork.</li>
+                            <li>Complétez <strong>Chemin du dossier</strong> avec le répertoire contenant vos fichiers (ex. <code>docs/</code> ou <code>docs/mes-cartes/</code>).</li>
+                            <li>Laissez le <strong>token d'accès</strong> vide si votre dépôt est public. Pour un dépôt privé, créez un token classique (<em>classic token</em>) et copiez-le ici.</li>
+                            <li>Cliquez sur <strong>Charger les fichiers depuis GitHub</strong> pour synchroniser les CSV et images.</li>
+                        </ol>
+                        <div class="github-guide__callout">
+                            Bon à savoir&nbsp;: les captures placées dans <code>docs/images_guides/</code> s'affichent automatiquement dans ce guide. Renommez vos fichiers selon les étapes (<code>github-step1.png</code>, <code>github-step2.png</code>, etc.) pour créer un pense-bête visuel.
+                        </div>
+                        <div class="github-guide__image-wrapper" data-guide-image="images_guides/github-step5.png" data-guide-alt="Configuration GitHub dans l'application" data-guide-label="github-step5.png"></div>
+                    </section>
+
+                    <section class="github-guide__step">
+                        <h4 class="github-guide__step-title">6. Comprendre ce qu'il faut faire dans son propre compte</h4>
+                        <ol class="github-guide__list">
+                            <li>Mettre à jour régulièrement votre fork en cliquant sur <strong>Sync fork</strong> pour récupérer les nouveautés du projet principal.</li>
+                            <li>Créer ou modifier vos cartes directement dans l'application puis exporter/committer les changements dans votre dépôt.</li>
+                            <li>Publier votre version avec GitHub Pages si vous souhaitez un accès en ligne (<strong>Settings &gt; Pages</strong> puis sélectionnez la branche et le dossier <code>docs/</code>).</li>
+                            <li>Partager l'URL générée par GitHub Pages avec vos élèves ou collègues.</li>
+                        </ol>
+                        <div class="github-guide__callout">
+                            Pensez à documenter vos choix dans un fichier <code>README.md</code> situé à la racine de votre fork pour garder une trace claire de vos adaptations pédagogiques.
+                        </div>
+                        <div class="github-guide__image-wrapper" data-guide-image="images_guides/github-step6.png" data-guide-alt="Publication GitHub Pages" data-guide-label="github-step6.png"></div>
+                    </section>
+
+                    <footer class="github-guide__footer">
+                        <p>Besoin d'un rappel rapide&nbsp;? Revenez à tout moment sur ce guide en cliquant sur <strong>📘 Explication du processus</strong> dans la section de configuration.</p>
+                    </footer>
+                </div>
+            </div>
         </div>
 
     <!-- Chargement des modules JavaScript -->

@@ -64,6 +64,7 @@ export class LeitnerApp {
         await this.loadCSVFromGitHub();
         this.refreshBoxes();
         this.bindEvents();
+        this.setupGitHubGuidePlaceholders();
 
         this.history.startSession({ mode: 'review' });
 
@@ -453,6 +454,98 @@ export class LeitnerApp {
 
         document.getElementById('load-github-csv').addEventListener('click', () => {
             this.loadCSVFromGitHub();
+        });
+
+        const githubGuideModal = document.getElementById('github-guide-modal');
+        const openGithubGuide = document.getElementById('open-github-guide');
+        const beginnerGithubGuide = document.getElementById('beginner-guide-btn');
+        const closeGithubGuide = document.getElementById('close-github-guide');
+        let lastGithubGuideTrigger = null;
+
+        const hideGithubGuide = () => {
+            if (!githubGuideModal) {
+                return;
+            }
+            githubGuideModal.classList.add('hidden');
+            githubGuideModal.setAttribute('aria-hidden', 'true');
+            (lastGithubGuideTrigger || openGithubGuide || beginnerGithubGuide)?.focus();
+        };
+
+        const showGithubGuide = () => {
+            if (!githubGuideModal) {
+                return;
+            }
+            this.setupGitHubGuidePlaceholders();
+            githubGuideModal.classList.remove('hidden');
+            githubGuideModal.setAttribute('aria-hidden', 'false');
+            closeGithubGuide?.focus();
+        };
+
+        openGithubGuide?.addEventListener('click', (event) => {
+            event.preventDefault();
+            this.saveConfig();
+            lastGithubGuideTrigger = event.currentTarget;
+            showGithubGuide();
+        });
+
+        beginnerGithubGuide?.addEventListener('click', (event) => {
+            event.preventDefault();
+            this.saveConfig();
+            lastGithubGuideTrigger = event.currentTarget;
+            showGithubGuide();
+        });
+
+        closeGithubGuide?.addEventListener('click', (event) => {
+            event.preventDefault();
+            hideGithubGuide();
+        });
+
+        githubGuideModal?.addEventListener('click', (event) => {
+            if (event.target === githubGuideModal) {
+                hideGithubGuide();
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && githubGuideModal && !githubGuideModal.classList.contains('hidden')) {
+                hideGithubGuide();
+            }
+        });
+    }
+
+    setupGitHubGuidePlaceholders() {
+        const wrappers = document.querySelectorAll('[data-guide-image]');
+        if (!wrappers.length) {
+            return;
+        }
+
+        wrappers.forEach((wrapper) => {
+            const imagePath = wrapper.dataset.guideImage;
+            const altText = wrapper.dataset.guideAlt || '';
+            const label = wrapper.dataset.guideLabel || imagePath || 'capture-guide.png';
+
+            if (!imagePath) {
+                wrapper.classList.add('github-guide__placeholder');
+                wrapper.innerHTML = `<span>Ajoutez votre capture dans <code>${label}</code>.</span>`;
+                return;
+            }
+
+            const image = new Image();
+            image.alt = altText;
+            image.className = 'github-guide__image';
+            image.onload = () => {
+                wrapper.classList.remove('github-guide__placeholder');
+                wrapper.innerHTML = '';
+                wrapper.appendChild(image);
+            };
+            image.onerror = () => {
+                wrapper.classList.add('github-guide__placeholder');
+                wrapper.innerHTML = [
+                    `<span>Capture manquante&nbsp;: placez un fichier nommé <code>${label}</code></span>`,
+                    `<span>Dans le dossier <code>docs/${imagePath}</code> pour l'afficher ici.</span>`
+                ].join('');
+            };
+            image.src = imagePath;
         });
     }
 }
