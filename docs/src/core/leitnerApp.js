@@ -62,6 +62,7 @@ export class LeitnerApp {
         this.crud.init(this);
         this.ui.applyUserConfig(this.userConfig);
 
+        this.bootstrapFromCache();
         await this.loadCSVFromGitHub();
         this.refreshBoxes();
         this.bindEvents();
@@ -89,6 +90,7 @@ export class LeitnerApp {
             repoOwner: 'leitexper1',
             repoName: 'leitexp',
             repoPath: 'docs/',
+            repoBranch: 'main',
             githubToken: ''
         };
 
@@ -98,6 +100,10 @@ export class LeitnerApp {
         document.getElementById('repo-owner').value = config.repoOwner;
         document.getElementById('repo-name').value = config.repoName;
         document.getElementById('repo-path').value = config.repoPath;
+        const branchInput = document.getElementById('repo-branch');
+        if (branchInput) {
+            branchInput.value = config.repoBranch || '';
+        }
         document.getElementById('github-token').value = config.githubToken;
 
         this.storage.setJSON('leitnerConfig', config);
@@ -109,6 +115,7 @@ export class LeitnerApp {
             repoOwner: document.getElementById('repo-owner').value || 'leitexper1',
             repoName: document.getElementById('repo-name').value || 'leitexp',
             repoPath: document.getElementById('repo-path').value || 'docs/',
+            repoBranch: (document.getElementById('repo-branch')?.value || 'main').trim(),
             githubToken: document.getElementById('github-token').value || ''
         };
 
@@ -212,6 +219,30 @@ export class LeitnerApp {
         return defaultName;
     }
 
+    bootstrapFromCache() {
+        const csvNames = this.storage.getJSON('leitnerCSVList', []);
+
+        if (!Array.isArray(csvNames) || csvNames.length === 0) {
+            this.ui.populateCSVSelector([]);
+            return;
+        }
+
+        const offlineFiles = csvNames.map(name => ({ name }));
+        this.github.csvFiles = offlineFiles;
+
+        const preferredName = this.getPreferredCSVName(csvNames[0]);
+        const selectedName = csvNames.includes(preferredName) ? preferredName : csvNames[0];
+        this.ui.populateCSVSelector(offlineFiles, { selectedName });
+
+        if (this.crud.loadFlashcards(selectedName)) {
+            return;
+        }
+
+        this.setCurrentCSV(selectedName);
+        this.flashcards = [];
+        this.refreshBoxes();
+    }
+
     async loadCSVFromGitHub() {
         try {
             await this.github.loadCSVList();
@@ -239,6 +270,7 @@ export class LeitnerApp {
     }
 
     loadCSVFromCache() {
+        this.bootstrapFromCache();
         const csvNames = this.storage.getJSON('leitnerCSVList', []);
 
         if (!Array.isArray(csvNames) || csvNames.length === 0) {
