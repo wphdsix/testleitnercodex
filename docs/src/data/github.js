@@ -299,7 +299,7 @@ export class GitHubManager {
 
     getImageUrl(imagePath, imageType = 'question') {
         if (!imagePath) return null;
-        
+
         // Si c'est déjà une URL complète, la retourner telle quelle
         if (imagePath.startsWith('http')) return imagePath;
         
@@ -343,6 +343,49 @@ export class GitHubManager {
 
         return baseUrl + fullPath;
     }
+
+    sanitizeFileName(fileName) {
+        if (!fileName) {
+            return '';
+        }
+        return fileName
+            .trim()
+            .replace(/[\s]+/g, '_')
+            .replace(/[^a-zA-Z0-9_.-]/g, '_');
+    }
+
+    buildRelativeImagePath(fileName, imageType = 'question') {
+        const safeName = this.sanitizeFileName(fileName);
+        if (!safeName) {
+            return '';
+        }
+        const directory = imageType === 'answer' ? 'images_reponses' : 'images_questions';
+        return `${directory}/${safeName}`;
+    }
+
+    ensureRepositoryImagePath(value, imageType = 'question') {
+        if (!value) {
+            return '';
+        }
+
+        const trimmed = value.trim();
+        if (!trimmed || trimmed.startsWith('data:')) {
+            return '';
+        }
+
+        const simplified = this.simplifyImagePath(trimmed, imageType);
+        const withoutPrefix = simplified.replace(/^(\.\/|\/)/, '');
+
+        if (withoutPrefix.startsWith('images_questions/') || withoutPrefix.startsWith('images_reponses/')) {
+            const parts = withoutPrefix.split('/');
+            const directory = parts.shift();
+            const filename = this.sanitizeFileName(parts.join('/'));
+            return filename ? `${directory}/${filename}` : directory;
+        }
+
+        return this.buildRelativeImagePath(withoutPrefix, imageType);
+    }
+
     simplifyImagePath(imageUrl, imageType = 'question') {
         if (!imageUrl) return '';
 

@@ -73,6 +73,7 @@ export class CSVInlineEditor {
         this.container = container;
         this.keyboardManager = keyboardManager || null;
         this.data = [];
+        this.previewCache = new Map();
 
         this.handleTableInput = this.handleTableInput.bind(this);
         this.handleAddRow = this.handleAddRow.bind(this);
@@ -178,6 +179,7 @@ export class CSVInlineEditor {
         }
 
         const cards = Array.isArray(this.app.flashcards) ? this.app.flashcards : [];
+        this.previewCache.clear();
         this.data = cards.map(card => ({
             question: card.question || '',
             questionImage: this.normaliseImageValue(card.questionImage || '', 'questionImage'),
@@ -217,6 +219,7 @@ export class CSVInlineEditor {
         const hasHeaders = headers.length === CSV_FIELDS.length && CSV_FIELDS.every((field, index) => headers[index] === field.header);
         const dataRows = hasHeaders ? rows.slice(1) : rows;
 
+        this.previewCache.clear();
         this.data = dataRows.map((row) => {
             const values = parseCsvLine(row);
             const mapped = {};
@@ -270,11 +273,13 @@ export class CSVInlineEditor {
                 target.textContent = String(numericValue);
             }
         } else if (field === 'questionImage' || field === 'answerImage') {
+            const cacheKey = this.getPreviewCacheKey(index, field);
+            this.previewCache.delete(cacheKey);
             const normalised = this.normaliseImageValue(trimmedValue, field);
             this.data[index][field] = normalised;
             const cell = target.closest('td');
             if (cell) {
-                this.updateImageCellUI(cell, normalised, field);
+                this.updateImageCellUI(cell, normalised, field, index);
             }
         } else {
             this.data[index][field] = trimmedValue;
@@ -460,11 +465,6 @@ export class CSVInlineEditor {
         importButton.className = 'csv-inline-editor__image-button';
         importButton.textContent = 'Importer';
 
-        const finalizeButton = document.createElement('button');
-        finalizeButton.type = 'button';
-        finalizeButton.className = 'csv-inline-editor__image-button csv-inline-editor__image-button--secondary';
-        finalizeButton.textContent = 'Lien final';
-
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = 'image/*';
@@ -485,10 +485,13 @@ export class CSVInlineEditor {
                     return;
                 }
 
-                this.data[index][field.key] = dataUrl;
-                this.updateImageCellUI(td, dataUrl, field.key);
+                const relativePath = this.buildRelativeImagePath(file.name, field.key);
+                const cacheKey = this.getPreviewCacheKey(index, field.key);
+                this.previewCache.set(cacheKey, dataUrl);
+                this.data[index][field.key] = relativePath;
+                this.updateImageCellUI(td, relativePath, field.key, index);
                 this.syncTextarea();
-                this.setStatus(`Image importée sur la ligne ${index + 1}.`);
+                this.setStatus(`Image importée sur la ligne ${index + 1} (${relativePath}).`);
             } catch (error) {
                 console.error('Erreur lors de la lecture du fichier image', error);
                 this.setStatus('Lecture du fichier image impossible.');
@@ -497,41 +500,16 @@ export class CSVInlineEditor {
             }
         });
 
-        finalizeButton.addEventListener('click', () => {
-            const currentInput = textInput.value.trim();
-            const currentValue = currentInput || (this.data[index][field.key] ?? '');
-            if (!currentValue) {
-                this.setStatus('Aucun lien à transformer.');
-                return;
-            }
-
-            if (!this.app?.github) {
-                this.setStatus('Transformation impossible sans configuration GitHub.');
-                return;
-            }
-
-            if (currentValue.startsWith('data:')) {
-                this.setStatus('Image déjà intégrée dans le CSV.');
-                return;
-            }
-
-            const simplified = this.normaliseImageValue(currentValue, field.key);
-            this.data[index][field.key] = simplified;
-            this.updateImageCellUI(td, simplified, field.key);
-            this.syncTextarea();
-            this.setStatus(`Lien transformé pour la ligne ${index + 1}.`);
-        });
-
         controls.appendChild(textInput);
         actions.appendChild(importButton);
-        actions.appendChild(finalizeButton);
         controls.appendChild(actions);
 
         td.appendChild(previewWrapper);
         td.appendChild(controls);
         td.appendChild(fileInput);
 
-        this.updateImageCellUI(td, row[field.key] ?? '', field.key);
+        textInput.value = row[field.key] ?? '';
+        this.updateImageCellUI(td, row[field.key] ?? '', field.key, index);
 
         return td;
     }
@@ -545,13 +523,21 @@ export class CSVInlineEditor {
      * @param {string} fieldKey - Field key.
      * @returns {void}
      */
-    updateImageCellUI(cell, value, fieldKey) {
+    updateImageCellUI(cell, value, fieldKey, rowIndex = null) {
         if (!cell) {
             return;
         }
 
         const preview = cell.querySelector('.csv-inline-editor__thumbnail');
-        this.updateImagePreviewElement(preview, value, fieldKey);
+        let overrideSrc = null;
+        if (rowIndex !== null) {
+            const cacheKey = this.getPreviewCacheKey(rowIndex, fieldKey);
+            overrideSrc = this.previewCache.get(cacheKey) || null;
+            if (!value && cacheKey) {
+                this.previewCache.delete(cacheKey);
+            }
+        }
+        this.updateImagePreviewElement(preview, value, fieldKey, overrideSrc);
 
         const input = cell.querySelector('.csv-inline-editor__image-input');
         if (input) {
@@ -575,6 +561,26 @@ export class CSVInlineEditor {
      * @param {string} fieldKey - Field key.
      * @returns {string}
      */
+    getPreviewCacheKey(index, fieldKey) {
+        return `${index}:${fieldKey}`;
+    }
+
+    buildRelativeImagePath(fileName, fieldKey) {
+        const trimmed = (fileName || '').trim();
+        if (!trimmed) {
+            return '';
+        }
+        const imageType = this.getImageTypeForField(fieldKey);
+        if (this.app?.github?.buildRelativeImagePath) {
+            return this.app.github.buildRelativeImagePath(trimmed, imageType);
+        }
+        const safeName = trimmed
+            .replace(/\s+/g, '_')
+            .replace(/[^a-zA-Z0-9_.-]/g, '_');
+        const directory = imageType === 'answer' ? 'images_reponses' : 'images_questions';
+        return `${directory}/${safeName}`;
+    }
+
     resolveImageSource(value, fieldKey) {
         const trimmed = (value || '').trim();
         if (!trimmed) {
@@ -599,11 +605,11 @@ export class CSVInlineEditor {
      * @param {string} fieldKey - Field key.
      * @returns {void}
      */
-    updateImagePreviewElement(preview, value, fieldKey) {
+    updateImagePreviewElement(preview, value, fieldKey, overrideSrc = null) {
         if (!preview) {
             return;
         }
-        const src = this.resolveImageSource(value, fieldKey);
+        const src = overrideSrc || this.resolveImageSource(value, fieldKey);
         if (src) {
             preview.src = src;
             preview.classList.remove('csv-inline-editor__thumbnail--hidden');
@@ -627,15 +633,21 @@ export class CSVInlineEditor {
             return '';
         }
         if (trimmed.startsWith('data:')) {
-            return trimmed;
+            return '';
         }
-        if (this.app?.github) {
-            const type = this.getImageTypeForField(fieldKey);
-            if (trimmed.startsWith('http')) {
-                return this.app.github.simplifyImagePath(trimmed, type);
-            }
+        const type = this.getImageTypeForField(fieldKey);
+        if (this.app?.github?.ensureRepositoryImagePath) {
+            return this.app.github.ensureRepositoryImagePath(trimmed, type);
         }
-        return trimmed;
+        if (trimmed.startsWith('http') && this.app?.github) {
+            return this.app.github.simplifyImagePath(trimmed, type);
+        }
+        const withoutPrefix = trimmed.replace(/^(\.\/|\/)/, '');
+        if (withoutPrefix.startsWith('images_questions/') || withoutPrefix.startsWith('images_reponses/')) {
+            return withoutPrefix;
+        }
+        const directory = type === 'answer' ? 'images_reponses' : 'images_questions';
+        return `${directory}/${withoutPrefix}`;
     }
 
     /**

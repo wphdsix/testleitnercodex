@@ -17,10 +17,42 @@ export class CRUDManager {
             reader.readAsDataURL(file);
         });
 
-        const processImageUpload = async ({ file, inlineData, fallback }) => {
+        const normaliseImagePath = (value, imageType) => {
+            if (!value) {
+                return '';
+            }
+            const raw = typeof value === 'string' ? value.trim() : String(value).trim();
+            if (!raw) {
+                return '';
+            }
+            if (raw.startsWith('data:')) {
+                return '';
+            }
+            if (this.app?.github?.ensureRepositoryImagePath) {
+                return this.app.github.ensureRepositoryImagePath(raw, imageType);
+            }
+            const trimmed = raw.replace(/^(\.\/|\/)/, '');
+            if (trimmed.startsWith('images_questions/') || trimmed.startsWith('images_reponses/')) {
+                return trimmed;
+            }
+            const directory = imageType === 'answer' ? 'images_reponses' : 'images_questions';
+            return `${directory}/${trimmed}`;
+        };
+
+        const processImageUpload = async ({ file, inlineData, fallback, type }) => {
+            const repositoryPath = normaliseImagePath(fallback, type);
+            if (repositoryPath) {
+                return repositoryPath;
+            }
+
             if (inlineData) {
                 return inlineData;
             }
+
+            if (file && this.app?.github) {
+                return this.app.github.buildRelativeImagePath(file.name, type);
+            }
+
             if (file) {
                 try {
                     return await readFileAsDataURL(file);
@@ -28,19 +60,22 @@ export class CRUDManager {
                     console.warn('Impossible de lire le fichier image sélectionné', error);
                 }
             }
-            return fallback || '';
+
+            return '';
         };
 
         const pendingImages = [
             processImageUpload({
                 file: this.app.currentQuestionImageFile,
                 inlineData: this.app.currentQuestionImageData,
-                fallback: cardData.questionImage
+                fallback: cardData.questionImage,
+                type: 'question'
             }),
             processImageUpload({
                 file: this.app.currentAnswerImageFile,
                 inlineData: this.app.currentAnswerImageData,
-                fallback: cardData.answerImage
+                fallback: cardData.answerImage,
+                type: 'answer'
             })
         ];
 
@@ -133,11 +168,15 @@ export class CRUDManager {
         
         // Données des cartes
         this.app.flashcards.forEach(card => {
+            const escapeValue = (text = '') => `"${String(text).replace(/"/g, '""')}"`;
+            const questionPath = this.app.github?.ensureRepositoryImagePath(card.questionImage, 'question') || '';
+            const answerPath = this.app.github?.ensureRepositoryImagePath(card.answerImage, 'answer') || '';
+
             const row = [
-                `"${card.question.replace(/"/g, '""')}"`,
-                card.questionImage ? `"${this.app.github.simplifyImagePath(card.questionImage, 'question').replace(/"/g, '""')}"` : '',
-                `"${card.answer.replace(/"/g, '""')}"`,
-                card.answerImage ? `"${this.app.github.simplifyImagePath(card.answerImage, 'answer').replace(/"/g, '""')}"` : '',
+                escapeValue(card.question || ''),
+                questionPath ? escapeValue(questionPath) : '',
+                escapeValue(card.answer || ''),
+                answerPath ? escapeValue(answerPath) : '',
                 card.box,
                 `"${new Date(card.lastReview).toISOString().split('T')[0]}"`
             ];
