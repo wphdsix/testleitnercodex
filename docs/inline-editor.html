@@ -716,11 +716,21 @@
                 return '';
             }
             const folder = type === 'question' ? 'images_questions' : 'images_reponses';
-            const cleanedFilename = filename.trim()
+            const normalised = normaliseImageValue(filename);
+            if (!normalised) {
+                return '';
+            }
+            const rawPath = filename.trim()
                 .replace(/\\/g, '/')
-                .replace(/^(?:\.\/)?/, '')
-                .replace(/^(images_questions|images_reponses)\//, '');
-            return `https://raw.githubusercontent.com/${encodeURIComponent(username)}/${encodeURIComponent(repository)}/${encodeURIComponent(branch)}/${folder}/${encodeURIComponent(cleanedFilename).replace(/%2F/g, '/')}`;
+                .replace(/^(?:\.\/)?/, '');
+            const alreadyPrefixed = rawPath.startsWith(`${folder}/`);
+            const finalPath = alreadyPrefixed ? rawPath : `${folder}/${normalised}`;
+            const encodedPath = finalPath
+                .split('/')
+                .filter((segment) => segment.length > 0)
+                .map((segment) => encodeURIComponent(segment))
+                .join('/');
+            return `https://raw.githubusercontent.com/${encodeURIComponent(username)}/${encodeURIComponent(repository)}/${encodeURIComponent(branch)}/${encodedPath}`;
         }
 
         function showStatus(type, message) {
@@ -878,9 +888,9 @@
             cardsBody.querySelectorAll('tr.card-row').forEach((row) => {
                 rows.push({
                     question: row.querySelector('[data-field="question"]').value.trim(),
-                    questionImage: row.querySelector('[data-field="questionImage"]').value.trim(),
+                    questionImage: normaliseImageValue(row.querySelector('[data-field="questionImage"]').value),
                     answer: row.querySelector('[data-field="answer"]').value.trim(),
-                    answerImage: row.querySelector('[data-field="answerImage"]').value.trim(),
+                    answerImage: normaliseImageValue(row.querySelector('[data-field="answerImage"]').value),
                     box: row.querySelector('[data-field="box"]').value.trim(),
                     lastReview: row.querySelector('[data-field="lastReview"]').value.trim()
                 });
