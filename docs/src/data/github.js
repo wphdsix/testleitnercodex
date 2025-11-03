@@ -8,6 +8,7 @@ export class GitHubManager {
             githubToken: ''
         };
         this.csvFiles = [];
+        this.localBaseUrl = null;
     }
 
     setConfig(config) {
@@ -72,6 +73,12 @@ export class GitHubManager {
     }
 
     async loadCSVList() {
+        const localFiles = await this.loadLocalCSVList();
+        if (localFiles.length > 0) {
+            this.csvFiles = localFiles;
+            return this.csvFiles;
+        }
+
         const repoPath = this.normaliseRepoPath(this.config.repoPath || '');
         const baseEndpoint = `/contents${repoPath || ''}`;
         const branches = this.buildBranchFallbacks();
@@ -88,6 +95,8 @@ export class GitHubManager {
                 this.csvFiles = contents.filter(item =>
                     item.type === 'file' && item.name && item.name.toLowerCase().endsWith('.csv')
                 );
+
+                this.localBaseUrl = null;
 
                 const csvList = this.csvFiles.map(file => file.name);
                 if (typeof window !== 'undefined' && window.localStorage) {
@@ -108,7 +117,109 @@ export class GitHubManager {
         console.error('Erreur de chargement de la liste CSV:', lastError);
         throw lastError || new Error('Impossible de récupérer la liste des fichiers CSV.');
     }
-    
+
+    buildLocalFileEntry(rawPath, baseUrl) {
+        if (!rawPath) {
+            return null;
+        }
+
+        try {
+            const url = new URL(rawPath, baseUrl);
+            const pathname = url.pathname || '';
+            const filename = decodeURIComponent(pathname.split('/').pop() || '');
+
+            if (!filename || !filename.toLowerCase().endsWith('.csv')) {
+                return null;
+            }
+
+            return {
+                name: filename,
+                download_url: url.href
+            };
+        } catch (error) {
+            console.warn('Échec de la normalisation du chemin CSV local', rawPath, error);
+            return null;
+        }
+    }
+
+    async loadLocalCSVList() {
+        if (typeof window === 'undefined' || typeof fetch === 'undefined') {
+            return [];
+        }
+
+        const baseUrl = new URL('.', window.location.href);
+        const manifestCandidates = ['csv-files.json', 'csv_manifest.json', '__csv_manifest.json'];
+
+        for (const manifestName of manifestCandidates) {
+            try {
+                const manifestUrl = new URL(manifestName, baseUrl);
+                const response = await fetch(manifestUrl, { cache: 'no-store' });
+                if (!response.ok) {
+                    continue;
+                }
+
+                const payload = await response.json();
+                const entries = Array.isArray(payload)
+                    ? payload
+                    : Array.isArray(payload?.files)
+                        ? payload.files
+                        : [];
+
+                const files = entries
+                    .map(entry => (typeof entry === 'string' ? entry : entry?.name))
+                    .filter(Boolean)
+                    .map(name => this.buildLocalFileEntry(name, baseUrl))
+                    .filter(Boolean);
+
+                if (files.length > 0) {
+                    this.localBaseUrl = baseUrl.href;
+                    return files;
+                }
+            } catch (error) {
+                console.warn('Lecture du manifeste CSV local échouée', manifestName, error);
+            }
+        }
+
+        try {
+            const response = await fetch(baseUrl.href, { cache: 'no-store' });
+            if (!response.ok) {
+                return [];
+            }
+
+            const contentType = response.headers.get('content-type') || '';
+            if (!/text\//i.test(contentType)) {
+                return [];
+            }
+
+            const body = await response.text();
+            const candidates = new Set();
+            const linkRegex = /href=["']?([^"'>\s]+\.(?:csv))["'\s>]/gi;
+            let match;
+            while ((match = linkRegex.exec(body)) !== null) {
+                candidates.add(match[1]);
+            }
+
+            body.split(/\s+/).forEach((token) => {
+                if (/\.csv$/i.test(token)) {
+                    candidates.add(token.replace(/["'>]/g, ''));
+                }
+            });
+
+            const files = Array.from(candidates)
+                .map(candidate => this.buildLocalFileEntry(candidate, baseUrl))
+                .filter(Boolean);
+
+            if (files.length > 0) {
+                this.localBaseUrl = baseUrl.href;
+                return files;
+            }
+        } catch (error) {
+            console.warn('Découverte des CSV locaux échouée', error);
+        }
+
+        return [];
+    }
+
     async loadCSVContent(url) {
         try {
             const response = await fetch(url);
@@ -196,41 +307,49 @@ export class GitHubManager {
         if (imagePath.startsWith('data:')) return imagePath;
         
         // Construire l'URL GitHub pour l'image
+        const normalised = imagePath.replace(/^\.\//, '').replace(/^\//, '');
+
+        if (this.localBaseUrl) {
+            let relativePath = normalised;
+            if (!relativePath.startsWith('images_questions/') && !relativePath.startsWith('images_reponses/')) {
+                const directory = imageType === 'answer' ? 'images_reponses' : 'images_questions';
+                relativePath = `${directory}/${relativePath}`;
+            }
+            return new URL(relativePath, this.localBaseUrl).toString();
+        }
+
         const branch = this.config.repoBranch || 'main';
         const baseUrl = `https://raw.githubusercontent.com/${this.config.repoOwner}/${this.config.repoName}/${branch}/`;
-        
-        // Utiliser le chemin du dépôt comme base
+
         let fullPath = this.config.repoPath || '';
-        
-        // Ajouter un slash si nécessaire
+
         if (fullPath && !fullPath.endsWith('/')) {
             fullPath += '/';
         }
-        
-        // Si le chemin commence déjà par images_questions ou images_reponses
-        if (imagePath.startsWith('images_questions/')) {
-            fullPath += imagePath;
-        } 
-        else if (imagePath.startsWith('images_reponses/')) {
-            fullPath += imagePath;
-        }
-        else {
-            // Déterminer le répertoire en fonction du type d'image
+
+        if (normalised.startsWith('images_questions/')) {
+            fullPath += normalised;
+        } else if (normalised.startsWith('images_reponses/')) {
+            fullPath += normalised;
+        } else {
             if (imageType === 'question') {
                 fullPath += 'images_questions/';
             } else if (imageType === 'answer') {
                 fullPath += 'images_reponses/';
             }
-            
-            // Ajouter le nom du fichier image
-            fullPath += imagePath;
+
+            fullPath += normalised;
         }
-        
+
         return baseUrl + fullPath;
     }
     simplifyImagePath(imageUrl, imageType = 'question') {
         if (!imageUrl) return '';
-        
+
+        if (this.localBaseUrl && imageUrl.startsWith(this.localBaseUrl)) {
+            return imageUrl.slice(this.localBaseUrl.length).replace(/^\//, '');
+        }
+
         // Si c'est une URL GitHub, extraire juste le nom du fichier
         if (imageUrl.includes('raw.githubusercontent.com')) {
             const parts = imageUrl.split('/');
