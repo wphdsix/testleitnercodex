@@ -6,6 +6,7 @@ const PRECACHE_PATHS = [
     './',
     'index.html',
     'style.css',
+    'csv-files.json',
     'src/main.js',
     'src/core/leitnerApp.js',
     'src/core/leitnerEngine.js',
