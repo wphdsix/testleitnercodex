@@ -11,6 +11,64 @@
     <!-- <link rel="icon" href="favicon.ico" type="image/x-icon"> -->
 </head>
 <script>
+  async function loadCsvFiles() {
+    const select = document.getElementById('csv-selector');
+    const owner = 'leitexper1';
+    const repo = 'testleitnercodex';
+    const branch = 'main';
+    const folderPath = 'docs'; // tu peux changer pour 'docs/cartes' si besoin
+
+    try {
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${folderPath}?ref=${branch}`;
+      const response = await fetch(apiUrl);
+
+      if (!response.ok) {
+        throw new Error(`Erreur API GitHub : ${response.status}`);
+      }
+
+      const files = await response.json();
+
+      // Filtrer les fichiers .csv (récursif si besoin)
+      const csvFiles = files
+        .filter(item => item.type === 'file' && item.name.endsWith('.csv'))
+        .map(item => ({
+          name: item.name,
+          path: item.path // relatif à la racine du dépôt
+        }));
+
+      // Trier par nom
+      csvFiles.sort((a, b) => a.name.localeCompare(b.name));
+
+      // Nettoyer le select
+      select.innerHTML = '';
+      if (csvFiles.length === 0) {
+        select.innerHTML = '<option value="">Aucun fichier .csv trouvé</option>';
+      } else {
+        csvFiles.forEach(file => {
+          const option = document.createElement('option');
+          // Valeur = chemin relatif depuis la racine du site (GitHub Pages sert à partir de /)
+          // Donc si le fichier est à "docs/box1.csv", l'URL publique est "/testleitnercodex/box1.csv"
+          // → on utilise juste le chemin relatif sans "docs/" si GitHub Pages est configuré sur /docs
+          // Mais pour plus de sûreté, on garde le chemin complet relatif à la racine du dépôt,
+          // puis on retire "docs/" car GitHub Pages le sert à la racine du site.
+          const publicPath = file.path.startsWith('docs/') ? file.path.substring(5) : file.path;
+          option.value = publicPath;
+          option.textContent = file.name;
+          select.appendChild(option);
+        });
+      }
+    } catch (err) {
+      console.error('Impossible de charger les fichiers CSV :', err);
+      select.innerHTML = '<option value="">Erreur de chargement</option>';
+    } finally {
+      select.disabled = false;
+    }
+  }
+
+  // Charger au démarrage
+  document.addEventListener('DOMContentLoaded', loadCsvFiles);
+
+
   function openImportExport() {
     const select = document.getElementById('csv-selector');
     const selectedFile = select?.value;
