@@ -4,63 +4,109 @@ export class GitHubManager {
             repoOwner: 'leitexper1',
             repoName: 'leitexp',
             repoPath: 'docs/',
+            repoBranch: 'main',
             githubToken: ''
         };
         this.csvFiles = [];
     }
-    
+
     setConfig(config) {
         this.config = { ...this.config, ...config };
     }
-    
+
+    normaliseRepoPath(path) {
+        if (!path) {
+            return '';
+        }
+        const trimmed = path
+            .trim()
+            .replace(/\\/g, '/')
+            .replace(/\/{2,}/g, '/');
+        if (!trimmed) {
+            return '';
+        }
+        const withoutLeading = trimmed.replace(/^\/+/, '');
+        const withoutTrailing = withoutLeading.replace(/\/+$/, '');
+        return withoutTrailing ? `/${withoutTrailing}` : '';
+    }
+
+    buildBranchFallbacks() {
+        const uniqueBranches = new Set();
+        if (this.config.repoBranch) {
+            uniqueBranches.add(this.config.repoBranch);
+        }
+        uniqueBranches.add('main');
+        uniqueBranches.add('master');
+        uniqueBranches.add('gh-pages');
+        uniqueBranches.add('');
+        return Array.from(uniqueBranches);
+    }
+
     async apiRequest(endpoint, options = {}) {
-        const url = `https://api.github.com/repos/${this.config.repoOwner}/${this.config.repoName}${endpoint}`;
+        const { branch = null, headers: customHeaders = {}, ...fetchOptions } = options;
+        let url = `https://api.github.com/repos/${this.config.repoOwner}/${this.config.repoName}${endpoint}`;
+        if (branch) {
+            url += (endpoint.includes('?') ? '&' : '?') + `ref=${encodeURIComponent(branch)}`;
+        }
         const headers = {
             'Accept': 'application/vnd.github.v3+json',
-            ...options.headers
+            ...customHeaders
         };
-        
+
         if (this.config.githubToken) {
             headers['Authorization'] = `token ${this.config.githubToken}`;
         }
-        
+
         const response = await fetch(url, {
-            ...options,
+            ...fetchOptions,
             headers
         });
-        
+
         if (!response.ok) {
-            throw new Error(`Erreur GitHub: ${response.status} ${response.statusText}`);
-        }
-        
-        return response.json();
-    }
-    
-    async loadCSVList() {
-        try {
-            let endpoint = '/contents/';
-            if (this.config.repoPath) {
-                endpoint = `/contents/${this.config.repoPath}`;
-            }
-            
-            const contents = await this.apiRequest(endpoint);
-            
-            // Filtrer les fichiers CSV
-            this.csvFiles = contents.filter(item => 
-                item.type === 'file' && item.name.endsWith('.csv')
-            );
-            
-            // Sauvegarder la liste pour une utilisation hors ligne
-            const csvList = this.csvFiles.map(file => file.name);
-            if (typeof window !== 'undefined' && window.localStorage) {
-                window.localStorage.setItem('leitnerCSVList', JSON.stringify(csvList));
-            }
-            
-            return this.csvFiles;
-        } catch (error) {
-            console.error('Erreur de chargement de la liste CSV:', error);
+            const error = new Error(`Erreur GitHub: ${response.status} ${response.statusText}`);
+            error.status = response.status;
             throw error;
         }
+
+        return response.json();
+    }
+
+    async loadCSVList() {
+        const repoPath = this.normaliseRepoPath(this.config.repoPath || '');
+        const baseEndpoint = `/contents${repoPath || ''}`;
+        const branches = this.buildBranchFallbacks();
+        let lastError = null;
+
+        for (const branch of branches) {
+            try {
+                const contents = await this.apiRequest(baseEndpoint, { branch: branch || null });
+
+                if (!Array.isArray(contents)) {
+                    continue;
+                }
+
+                this.csvFiles = contents.filter(item =>
+                    item.type === 'file' && item.name && item.name.toLowerCase().endsWith('.csv')
+                );
+
+                const csvList = this.csvFiles.map(file => file.name);
+                if (typeof window !== 'undefined' && window.localStorage) {
+                    window.localStorage.setItem('leitnerCSVList', JSON.stringify(csvList));
+                }
+
+                if (this.csvFiles.length > 0 || branch === '') {
+                    return this.csvFiles;
+                }
+            } catch (error) {
+                lastError = error;
+                if (error?.status && error.status !== 404) {
+                    break;
+                }
+            }
+        }
+
+        console.error('Erreur de chargement de la liste CSV:', lastError);
+        throw lastError || new Error('Impossible de récupérer la liste des fichiers CSV.');
     }
     
     async loadCSVContent(url) {
@@ -150,7 +196,8 @@ export class GitHubManager {
         if (imagePath.startsWith('data:')) return imagePath;
         
         // Construire l'URL GitHub pour l'image
-        const baseUrl = `https://raw.githubusercontent.com/${this.config.repoOwner}/${this.config.repoName}/main/`;
+        const branch = this.config.repoBranch || 'main';
+        const baseUrl = `https://raw.githubusercontent.com/${this.config.repoOwner}/${this.config.repoName}/${branch}/`;
         
         // Utiliser le chemin du dépôt comme base
         let fullPath = this.config.repoPath || '';
