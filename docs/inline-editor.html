@@ -226,8 +226,7 @@
             align-items: center;
         }
 
-        .editor-actions button,
-        .editor-actions label[for="importCsv"] {
+        .editor-actions button {
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
@@ -243,8 +242,7 @@
             transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
 
-        .editor-actions button:hover,
-        .editor-actions label[for="importCsv"]:hover {
+        .editor-actions button:hover {
             transform: translateY(-1px);
             box-shadow: 0 16px 30px rgba(37, 99, 235, 0.25);
         }
@@ -253,6 +251,11 @@
             background: rgba(37, 99, 235, 0.12);
             color: var(--primary);
             box-shadow: none;
+        }
+
+        .editor-actions button.secondary:hover {
+            box-shadow: none;
+            transform: translateY(-1px);
         }
 
         table {
@@ -526,7 +529,7 @@
             </div>
             <div class="editor-actions">
                 <button type="button" id="addRow" title="Ajouter une nouvelle carte">➕ Ajouter une carte</button>
-                <label for="importCsv" class="secondary" title="Importer un fichier CSV existant">📥 Importer un CSV</label>
+                <button type="button" id="triggerImportCsv" class="secondary" title="Importer un fichier CSV existant">📥 Importer un CSV</button>
                 <input id="importCsv" class="import-input" type="file" accept="text/csv">
                 <button type="button" id="exportCsv" title="Générer un fichier CSV encodé en UTF-8">💾 Exporter le CSV</button>
                 <span class="status" id="statusMessage" role="status" aria-live="polite"></span>
@@ -574,15 +577,27 @@
         const statusMessage = document.getElementById('statusMessage');
         const cardsBody = document.getElementById('cardsBody');
 
-        function escapeCsvValue(value) {
-            if (value === undefined || value === null) {
+        function formatDateInputValue(value) {
+            if (!value) {
                 return '';
             }
-            const stringValue = String(value);
-            if (/[",\n]/.test(stringValue)) {
-                return '"' + stringValue.replace(/"/g, '""') + '"';
+            const source = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+            if (Number.isNaN(source.getTime())) {
+                return '';
             }
-            return stringValue;
+            const year = source.getFullYear();
+            const month = String(source.getMonth() + 1).padStart(2, '0');
+            const day = String(source.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function getTodayDateValue() {
+            return formatDateInputValue(new Date());
+        }
+
+        function escapeCsvValue(value) {
+            const stringValue = value === undefined || value === null ? '' : String(value);
+            return '"' + stringValue.replace(/"/g, '""') + '"';
         }
 
         function parseCsvLine(line) {
@@ -661,13 +676,14 @@
 
             for (let i = 1; i < lines.length; i += 1) {
                 const values = parseCsvLine(lines[i]);
+                const numericBox = Number.parseInt(values[headerIndex.box_number], 10);
                 const entry = {
                     question: values[headerIndex.question_content] || '',
                     questionImage: normaliseImageValue(values[headerIndex.question_content_image]),
                     answer: values[headerIndex.answer_content] || '',
                     answerImage: normaliseImageValue(values[headerIndex.answer_content_image]),
-                    box: values[headerIndex.box_number] || '',
-                    lastReview: values[headerIndex.last_reviewed] || ''
+                    box: Number.isFinite(numericBox) && numericBox > 0 ? String(numericBox) : '1',
+                    lastReview: formatDateInputValue(values[headerIndex.last_reviewed])
                 };
                 rows.push(entry);
             }
@@ -845,6 +861,10 @@
         }
 
         function addRow(data = {}) {
+            const today = getTodayDateValue();
+            const numericBox = Number.parseInt(data.box, 10);
+            const boxValue = Number.isFinite(numericBox) && numericBox > 0 ? String(numericBox) : '1';
+            const lastReviewValue = data.lastReview ? formatDateInputValue(data.lastReview) : today;
             const tr = document.createElement('tr');
             tr.className = 'card-row';
             tr.innerHTML = `
@@ -867,10 +887,10 @@
                     </div>
                 </td>
                 <td>
-                    <input class="field" data-field="box" type="number" min="1" placeholder="1" value="${data.box ? data.box : ''}" title="Numéro de boîte Leitner">
+                    <input class="field" data-field="box" type="number" min="1" placeholder="1" value="${boxValue}" title="Numéro de boîte Leitner">
                 </td>
                 <td>
-                    <input class="field" data-field="lastReview" type="date" value="${data.lastReview ? data.lastReview : ''}" title="Date de dernière révision">
+                    <input class="field" data-field="lastReview" type="date" value="${lastReviewValue}" title="Date de dernière révision">
                 </td>
                 <td>
                     <button type="button" class="delete-row" title="Supprimer cette carte">Supprimer</button>
@@ -935,10 +955,7 @@
         function handleExport() {
             clearStatus();
             const { username, repository, branch } = state.config;
-            if (!username || !repository || !branch) {
-                showStatus('error', 'Complétez la configuration GitHub avant l\'export.');
-                return;
-            }
+            const hasCompleteConfig = Boolean(username && repository && branch);
             const rows = gatherRows();
             if (!rows.length) {
                 showStatus('warning', 'Ajoutez au moins une carte avant d\'exporter.');
@@ -951,20 +968,21 @@
             }
             const csvLines = [HEADER.join(',')];
             rows.forEach((row) => {
-                const questionImageUrl = row.questionImage ? buildRemoteUrl('question', row.questionImage) : '';
-                const answerImageUrl = row.answerImage ? buildRemoteUrl('answer', row.answerImage) : '';
                 csvLines.push([
                     escapeCsvValue(row.question),
-                    escapeCsvValue(questionImageUrl),
+                    escapeCsvValue(row.questionImage || ''),
                     escapeCsvValue(row.answer),
-                    escapeCsvValue(answerImageUrl),
-                    escapeCsvValue(row.box),
-                    escapeCsvValue(row.lastReview)
+                    escapeCsvValue(row.answerImage || ''),
+                    escapeCsvValue(row.box || '1'),
+                    escapeCsvValue(row.lastReview || '')
                 ].join(','));
             });
             const content = csvLines.join('\r\n');
             downloadCsv(content);
-            showStatus('success', 'Export CSV réussi : les liens ont été générés avec succès.');
+            const message = hasCompleteConfig
+                ? 'Export CSV réussi : format compatible avec les fichiers existants.'
+                : 'Export CSV réussi. Les noms de fichiers ont été conservés faute de configuration GitHub.';
+            showStatus(hasCompleteConfig ? 'success' : 'warning', message);
         }
 
         function handleCsvImport(event) {
@@ -1059,6 +1077,9 @@
         });
 
         document.getElementById('exportCsv').addEventListener('click', handleExport);
+        document.getElementById('triggerImportCsv').addEventListener('click', () => {
+            document.getElementById('importCsv').click();
+        });
         document.getElementById('importCsv').addEventListener('change', handleCsvImport);
 
         window.addEventListener('beforeunload', () => {

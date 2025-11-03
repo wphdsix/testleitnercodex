@@ -64,6 +64,15 @@ export class CRUDManager {
             return '';
         };
 
+        const resolvedBox = Number.isFinite(Number(cardData.box))
+            ? Math.max(1, Math.trunc(Number(cardData.box)))
+            : 1;
+
+        let resolvedLastReview = Date.parse(cardData.lastReview);
+        if (!Number.isFinite(resolvedLastReview)) {
+            resolvedLastReview = Date.now();
+        }
+
         const pendingImages = [
             processImageUpload({
                 file: this.app.currentQuestionImageFile,
@@ -97,7 +106,9 @@ export class CRUDManager {
                         question: cardData.question,
                         questionImage: cardData.questionImage,
                         answer: cardData.answer,
-                        answerImage: cardData.answerImage
+                        answerImage: cardData.answerImage,
+                        box: resolvedBox,
+                        lastReview: resolvedLastReview
                     });
                 }
             } else {
@@ -108,8 +119,8 @@ export class CRUDManager {
                     questionImage: cardData.questionImage,
                     answer: cardData.answer,
                     answerImage: cardData.answerImage,
-                    box: 1,
-                    lastReview: Date.now(),
+                    box: resolvedBox,
+                    lastReview: resolvedLastReview,
                     difficulty: this.app.userConfig.defaultDifficulty
                 });
                 this.app.flashcards.push(newCard);
@@ -166,19 +177,41 @@ export class CRUDManager {
         // Entête CSV selon le format demandé
         let csvContent = "question_content,question_content_image,answer_content,answer_content_image,box_number,last_reviewed\n";
         
+        const escapeValue = (text = '') => `"${String(text).replace(/"/g, '""')}"`;
+        const formatImageValue = (value, type) => {
+            if (!value) {
+                return '';
+            }
+
+            const simplify = this.app.github?.simplifyImagePath
+                ? this.app.github.simplifyImagePath(value, type)
+                : value;
+
+            return (simplify || '').replace(/^images_(?:questions|reponses)\//, '');
+        };
+        const formatLastReview = (value) => {
+            if (!value) {
+                return '';
+            }
+            const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return '';
+            }
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
         // Données des cartes
         this.app.flashcards.forEach(card => {
-            const escapeValue = (text = '') => `"${String(text).replace(/"/g, '""')}"`;
-            const questionPath = this.app.github?.ensureRepositoryImagePath(card.questionImage, 'question') || '';
-            const answerPath = this.app.github?.ensureRepositoryImagePath(card.answerImage, 'answer') || '';
-
             const row = [
                 escapeValue(card.question || ''),
-                questionPath ? escapeValue(questionPath) : '',
+                escapeValue(formatImageValue(card.questionImage, 'question')),
                 escapeValue(card.answer || ''),
-                answerPath ? escapeValue(answerPath) : '',
-                card.box,
-                `"${new Date(card.lastReview).toISOString().split('T')[0]}"`
+                escapeValue(formatImageValue(card.answerImage, 'answer')),
+                escapeValue(Number.isFinite(Number(card.box)) ? String(Math.trunc(Number(card.box))) : '1'),
+                escapeValue(formatLastReview(card.lastReview))
             ];
             csvContent += row.join(',') + '\n';
         });

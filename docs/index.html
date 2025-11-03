@@ -36,9 +36,9 @@
                 <button id="tab-stats-trigger" class="tab-button" role="tab" aria-selected="false" aria-controls="tab-stats" data-tab-target="stats">
                     Statistiques
                 </button>
-                <button id="import-export-trigger" class="tab-button" type="button" aria-haspopup="dialog" aria-controls="import-export-modal">
+                <a id="import-export-trigger" class="tab-button" href="inline-editor.html" target="_blank" rel="noopener">
                     Import/Export
-                </button>
+                </a>
             </nav>
 
             <section id="tab-review" class="tab-panel space-y-6" role="tabpanel" aria-labelledby="tab-review-trigger" data-tab-panel="review">
@@ -124,6 +124,16 @@
                                     </div>
                                     <p id="answer-image-status" class="image-status">Aucune image sélectionnée.</p>
                                     <img id="answer-image-preview" class="image-preview" alt="Prévisualisation de l'image réponse" aria-hidden="true">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1" for="card-box">Boîte</label>
+                                    <input type="number" id="card-box" class="w-full p-2 border rounded" min="1" value="1">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1" for="card-last-reviewed">Dernière révision</label>
+                                    <input type="date" id="card-last-reviewed" class="w-full p-2 border rounded">
                                 </div>
                             </div>
                             <div class="flex justify-end gap-3 pt-4">
@@ -330,21 +340,6 @@
                 </div>
             </section>
 
-        </div>
-
-        <div id="import-export-modal" class="hidden import-export-modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="import-export-title">
-            <div class="import-export-modal__dialog" role="document">
-                <div class="import-export-modal__header">
-                    <h3 id="import-export-title">Import / Export des cartes</h3>
-                    <button id="close-import-export" class="import-export-modal__close" aria-label="Fermer la fenêtre Import/Export">✕</button>
-                </div>
-                <div class="import-export-modal__body">
-                    <p class="import-export-modal__description">
-                        Gérez vos cartes directement dans ce tableau : modifiez les questions, images, réponses ainsi que leur boîte et la date de révision.
-                    </p>
-                    <div id="csv-inline-editor" class="csv-inline-editor__wrapper" aria-live="polite"></div>
-                </div>
-            </div>
         </div>
 
         <!-- Guide GitHub -->
