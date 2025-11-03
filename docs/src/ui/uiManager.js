@@ -591,13 +591,17 @@ export class UIManager {
         });
         
         // Sélection d'un fichier CSV
-        document.getElementById('csv-selector').addEventListener('change', (e) => {
+        const csvSelector = document.getElementById('csv-selector');
+        csvSelector.addEventListener('change', (e) => {
             const selectedOption = e.target.options[e.target.selectedIndex];
-            if (selectedOption.dataset.downloadUrl) {
-                if (confirm(`Voulez-vous charger le fichier ${selectedOption.value} depuis GitHub?`)) {
-                    this.app.loadCSVFromURL(selectedOption.dataset.downloadUrl, selectedOption.value);
-                }
+            const csvName = selectedOption?.value;
+
+            if (!csvName || csvName === 'default') {
+                this.app.setCurrentCSV('default');
+                return;
             }
+
+            this.app.setCurrentCSV(csvName);
         });
         
         // Bouton nouvelle carte
@@ -622,19 +626,36 @@ export class UIManager {
         });
         
         // Charger un CSV
-        document.getElementById('load-csv').addEventListener('click', () => {
-            const selectedCSV = document.getElementById('csv-selector').value;
-            if (selectedCSV && selectedCSV !== 'default') {
-                if (this.app.crud.loadFlashcards(selectedCSV)) {
-                    alert(`Fichier "${selectedCSV}" chargé avec ${this.app.flashcards.length} cartes`);
-                } else {
-                    alert(`Création d'un nouveau fichier "${selectedCSV}"`);
-                    this.app.setCurrentCSV(selectedCSV);
-                    this.app.flashcards = [];
-                    this.app.saveFlashcards();
-                }
-            } else {
+        document.getElementById('load-csv').addEventListener('click', async () => {
+            const selector = document.getElementById('csv-selector');
+            const selectedOption = selector.options[selector.selectedIndex];
+            const selectedCSV = selectedOption?.value;
+
+            if (!selectedCSV || selectedCSV === 'default') {
                 alert('Veuillez sélectionner un fichier CSV');
+                return;
+            }
+
+            const downloadUrl = selectedOption.dataset.downloadUrl;
+            if (downloadUrl) {
+                const isLocal = !!this.app.github?.localBaseUrl && downloadUrl.startsWith(this.app.github.localBaseUrl);
+                const sourceLabel = isLocal ? 'le dossier local' : 'GitHub';
+                const shouldLoad = confirm(`Voulez-vous charger le fichier "${selectedCSV}" depuis ${sourceLabel} ?`);
+                if (!shouldLoad) {
+                    return;
+                }
+
+                await this.app.loadCSVFromURL(downloadUrl, selectedCSV);
+                return;
+            }
+
+            if (this.app.crud.loadFlashcards(selectedCSV)) {
+                alert(`Fichier "${selectedCSV}" chargé avec ${this.app.flashcards.length} cartes`);
+            } else {
+                alert(`Création d'un nouveau fichier "${selectedCSV}"`);
+                this.app.setCurrentCSV(selectedCSV);
+                this.app.flashcards = [];
+                this.app.saveFlashcards();
             }
         });
         
@@ -775,7 +796,6 @@ export class UIManager {
             });
         }
 
-        const csvSelector = document.getElementById('csv-selector');
         if (csvSelector) {
             this.keyboardManager.registerShortcut('ctrl+shift+l', () => {
                 csvSelector.focus();

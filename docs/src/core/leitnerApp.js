@@ -545,7 +545,6 @@ export class LeitnerApp {
         const beginnerGithubGuide = document.getElementById('beginner-guide-btn');
         const closeGithubGuide = document.getElementById('close-github-guide');
         let lastGithubGuideTrigger = null;
-        const closeGithubGuide = document.getElementById('close-github-guide');
 
         const hideGithubGuide = () => {
             if (!githubGuideModal) {
@@ -553,8 +552,8 @@ export class LeitnerApp {
             }
             githubGuideModal.classList.add('hidden');
             githubGuideModal.setAttribute('aria-hidden', 'true');
-            (lastGithubGuideTrigger || openGithubGuide || beginnerGithubGuide)?.focus();
-            openGithubGuide?.focus();
+            const focusTarget = lastGithubGuideTrigger || openGithubGuide || beginnerGithubGuide;
+            focusTarget?.focus();
         };
 
         const showGithubGuide = () => {
