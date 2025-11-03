@@ -10,6 +10,18 @@
     <!-- Variante avec un .ico classique -->
     <!-- <link rel="icon" href="favicon.ico" type="image/x-icon"> -->
 </head>
+<script>
+  function openImportExport() {
+    const select = document.getElementById('csv-selector');
+    const selectedFile = select?.value;
+    if (!selectedFile) {
+      alert('Veuillez sélectionner un fichier CSV.');
+      return;
+    }
+    const url = `import-export.html?csv=${encodeURIComponent(selectedFile)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+</script>
 <body class="site-background text-gray-800">
     <div class="container mx-auto max-w-6xl p-5">
         <header class="text-center mb-8">
@@ -36,9 +48,8 @@
                 <button id="tab-stats-trigger" class="tab-button" role="tab" aria-selected="false" aria-controls="tab-stats" data-tab-target="stats">
                     Statistiques
                 </button>
-                <a id="import-export-trigger" class="tab-button" href="import-export.html" target="_blank" rel="noopener">
-                    Import/Export
-                </a>                
+            <!-- Remplace ton ancien bouton par celui-ci -->
+            <button onclick="openImportExport()">Import / Export avancé</button>           
             </nav>
             <section id="tab-review" class="tab-panel space-y-6" role="tabpanel" aria-labelledby="tab-review-trigger" data-tab-panel="review">
                 <!-- Section gestion des fichiers -->
