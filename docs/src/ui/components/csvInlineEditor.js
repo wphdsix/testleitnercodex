@@ -13,15 +13,8 @@ const CSV_FIELDS = [
 ];
 
 function escapeCsvValue(value) {
-    if (value === null || value === undefined) {
-        return '';
-    }
-
-    const stringValue = String(value);
-    if (stringValue.includes('"') || stringValue.includes(',') || stringValue.includes(';') || stringValue.includes('\n')) {
-        return `"${stringValue.replace(/"/g, '""')}"`;
-    }
-    return stringValue;
+    const stringValue = value === null || value === undefined ? '' : String(value);
+    return `"${stringValue.replace(/"/g, '""')}"`;
 }
 
 function parseCsvLine(line) {
@@ -56,12 +49,15 @@ function formatLastReview(dateValue) {
         return '';
     }
 
-    const date = new Date(dateValue);
+    const date = dateValue instanceof Date ? new Date(dateValue.getTime()) : new Date(dateValue);
     if (Number.isNaN(date.getTime())) {
         return '';
     }
 
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 export class CSVInlineEditor {
     /**
@@ -294,13 +290,14 @@ export class CSVInlineEditor {
      * @returns {void}
      */
     handleAddRow() {
+        const today = formatLastReview(new Date());
         this.data.push({
             question: '',
             questionImage: '',
             answer: '',
             answerImage: '',
             box: 1,
-            lastReview: ''
+            lastReview: today
         });
         this.renderRows();
         this.syncTextarea();

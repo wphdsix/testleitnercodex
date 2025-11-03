@@ -4,7 +4,6 @@ export class UIManager {
         this.boxClickHandler = null;
         this.keyboardManager = app?.keyboardManager || null;
         this.imageFieldControllers = {};
-        this.importExportKeyHandler = null;
         this.bindEvents();
         this.registerKeyboardShortcuts();
     }
@@ -521,64 +520,42 @@ export class UIManager {
         container.setAttribute('aria-hidden', 'true');
     }
 
-    showImportExportModal() {
-        const modal = document.getElementById('import-export-modal');
-        if (!modal) {
-            return;
-        }
-
-        modal.classList.remove('hidden');
-        modal.setAttribute('aria-hidden', 'false');
-
-        if (typeof document !== 'undefined' && document.body) {
-            document.body.classList.add('modal-open');
-        }
-
-        const closeButton = document.getElementById('close-import-export');
-        closeButton?.focus();
-
-        if (!this.importExportKeyHandler) {
-            this.importExportKeyHandler = (event) => {
-                if (event.key === 'Escape') {
-                    this.hideImportExportModal();
-                }
-            };
-            document.addEventListener('keydown', this.importExportKeyHandler);
-        }
-    }
-
-    hideImportExportModal() {
-        const modal = document.getElementById('import-export-modal');
-        if (!modal) {
-            return;
-        }
-
-        modal.classList.add('hidden');
-        modal.setAttribute('aria-hidden', 'true');
-
-        if (typeof document !== 'undefined' && document.body) {
-            document.body.classList.remove('modal-open');
-        }
-
-        if (this.importExportKeyHandler) {
-            document.removeEventListener('keydown', this.importExportKeyHandler);
-            this.importExportKeyHandler = null;
-        }
-
-        const trigger = document.getElementById('import-export-trigger');
-        trigger?.focus();
-    }
-    
     // Dans ui.js, modifiez la méthode showCardEditor
     showCardEditor(card = null) {
         const form = document.getElementById('card-form');
         const title = document.getElementById('editor-title');
-        
+        const boxInput = document.getElementById('card-box');
+        const lastReviewInput = document.getElementById('card-last-reviewed');
+
+        const formatDateInputValue = (value) => {
+            if (!value) {
+                return '';
+            }
+
+            const source = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+            if (Number.isNaN(source.getTime())) {
+                return '';
+            }
+
+            const year = source.getFullYear();
+            const month = String(source.getMonth() + 1).padStart(2, '0');
+            const day = String(source.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
         if (card) {
             title.textContent = 'Modifier la carte';
             document.getElementById('card-id').value = card.id;
             document.getElementById('card-question').value = card.question;
             document.getElementById('card-answer').value = card.answer;
+
+            if (boxInput) {
+                boxInput.value = Number.isFinite(Number(card.box)) ? String(card.box) : '1';
+            }
+
+            if (lastReviewInput) {
+                lastReviewInput.value = formatDateInputValue(card.lastReview);
+            }
 
             if (this.imageFieldControllers?.question) {
                 this.imageFieldControllers.question.updateFromValue(card.questionImage || '');
@@ -590,6 +567,12 @@ export class UIManager {
             title.textContent = 'Nouvelle carte';
             form.reset();
             document.getElementById('card-id').value = '';
+            if (boxInput) {
+                boxInput.value = '1';
+            }
+            if (lastReviewInput) {
+                lastReviewInput.value = formatDateInputValue(new Date());
+            }
             if (this.imageFieldControllers?.question) {
                 this.imageFieldControllers.question.clear();
             }
@@ -689,6 +672,15 @@ export class UIManager {
             this.app.setCurrentCSV(csvName);
         });
         
+        // Lien Import/Export vers l'éditeur plein écran
+        const importExportTrigger = document.getElementById('import-export-trigger');
+        if (importExportTrigger && importExportTrigger.tagName !== 'A') {
+            importExportTrigger.addEventListener('click', (event) => {
+                event.preventDefault();
+                window.open('inline-editor.html', '_blank', 'noopener');
+            });
+        }
+
         // Soumission du formulaire
         document.getElementById('card-form').addEventListener('submit', (e) => {
             e.preventDefault();
@@ -697,7 +689,9 @@ export class UIManager {
                 question: document.getElementById('card-question').value,
                 questionImage: document.getElementById('card-question-image').value,
                 answer: document.getElementById('card-answer').value,
-                answerImage: document.getElementById('card-answer-image').value
+                answerImage: document.getElementById('card-answer-image').value,
+                box: document.getElementById('card-box')?.value,
+                lastReview: document.getElementById('card-last-reviewed')?.value
             });
         });
         
@@ -734,25 +728,6 @@ export class UIManager {
                 this.app.saveFlashcards();
             }
         });
-        const importExportTrigger = document.getElementById('import-export-trigger');
-        const importExportModal = document.getElementById('import-export-modal');
-        const closeImportExport = document.getElementById('close-import-export');
-
-        if (importExportTrigger && importExportModal) {
-            importExportTrigger.addEventListener('click', () => {
-                this.showImportExportModal();
-            });
-
-            closeImportExport?.addEventListener('click', () => {
-                this.hideImportExportModal();
-            });
-
-            importExportModal.addEventListener('click', (event) => {
-                if (event.target === importExportModal) {
-                    this.hideImportExportModal();
-                }
-            });
-        }
 
         this.imageFieldControllers.question = this.setupImageField('question');
         this.imageFieldControllers.answer = this.setupImageField('answer');
