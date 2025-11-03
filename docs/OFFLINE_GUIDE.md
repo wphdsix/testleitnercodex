@@ -4,12 +4,22 @@ Ce guide explique comment préparer l'application pour un usage hors-ligne, comm
 
 ## Installation hors-ligne
 
-1. **Servir les fichiers du dossier `docs/`.** Publiez le contenu (via GitHub Pages ou un serveur statique). L'application inclut désormais un *service worker* (`src/workers/offlineWorker.js`) qui met automatiquement en cache les ressources critiques.
-2. **Visiter l'application au moins une fois en ligne.** Lors de la première visite, le service worker est enregistré et pré-télécharge les fichiers HTML, CSS, JavaScript et images clés.
-3. **Vérifier l'installation du service worker.** Dans votre navigateur :
+1. **Servir les fichiers du dossier `docs/`.** Publiez le contenu (via GitHub Pages ou un serveur statique) ou démarrez un petit serveur local lors du développement :
+
+   ```bash
+   cd docs
+   python -m http.server 8080
+   # ou
+   npx serve .
+   ```
+
+   L'application inclut un *service worker* (`src/workers/offlineWorker.js`) qui met automatiquement en cache les ressources critiques. L'ouverture directe du fichier `index.html` via `file:///` empêche les requêtes `fetch` de récupérer `csv-files.json` et les fichiers CSV.
+2. **Mettre à jour le manifeste des CSV locaux.** Après avoir ajouté ou retiré un fichier `*.csv`, exécutez `python3 scripts/update_csv_manifest.py` depuis la racine du dépôt pour régénérer `docs/csv-files.json`.
+3. **Visiter l'application au moins une fois en ligne.** Lors de la première visite, le service worker est enregistré et pré-télécharge les fichiers HTML, CSS, JavaScript et images clés.
+4. **Vérifier l'installation du service worker.** Dans votre navigateur :
    - Ouvrez les outils de développement → onglet *Application* → section *Service Workers*.
    - Confirmez que `offlineWorker.js` est « Activated and running ».
-4. **Ajouter l'application à l'écran d'accueil (optionnel).** Les navigateurs mobiles proposeront l'installation en PWA dès que le service worker est actif, ce qui permet une utilisation hors-ligne complète.
+5. **Ajouter l'application à l'écran d'accueil (optionnel).** Les navigateurs mobiles proposeront l'installation en PWA dès que le service worker est actif, ce qui permet une utilisation hors-ligne complète.
 
 Une fois ces étapes réalisées, l'application reste fonctionnelle sans connexion réseau. Les ressources sont servies depuis le cache, et les requêtes d'arrière-plan sont mises en file pour synchronisation ultérieure.
 
