@@ -4,6 +4,7 @@ export class UIManager {
         this.boxClickHandler = null;
         this.keyboardManager = app?.keyboardManager || null;
         this.imageFieldControllers = {};
+        this.importExportKeyHandler = null;
         this.bindEvents();
         this.registerKeyboardShortcuts();
     }
@@ -38,6 +39,39 @@ export class UIManager {
                 clear: () => {}
             };
         }
+
+        const resolveImageType = () => (type === 'answer' ? 'answer' : 'question');
+
+        const normaliseToRepositoryPath = (rawValue) => {
+            const trimmed = (rawValue || '').trim();
+            if (!trimmed) {
+                return '';
+            }
+            if (this.app?.github?.ensureRepositoryImagePath) {
+                return this.app.github.ensureRepositoryImagePath(trimmed, resolveImageType());
+            }
+            const withoutPrefix = trimmed.replace(/^\.\/+/, '').replace(/^\/+/, '');
+            if (withoutPrefix.startsWith('images_questions/') || withoutPrefix.startsWith('images_reponses/')) {
+                return withoutPrefix;
+            }
+            const directory = resolveImageType() === 'answer' ? 'images_reponses' : 'images_questions';
+            return `${directory}/${withoutPrefix}`;
+        };
+
+        const buildRelativePathFromFile = (fileName) => {
+            const trimmed = (fileName || '').trim();
+            if (!trimmed) {
+                return '';
+            }
+            if (this.app?.github?.buildRelativeImagePath) {
+                return this.app.github.buildRelativeImagePath(trimmed, resolveImageType());
+            }
+            const safeName = trimmed
+                .replace(/\s+/g, '_')
+                .replace(/[^a-zA-Z0-9_.-]/g, '_');
+            const directory = resolveImageType() === 'answer' ? 'images_reponses' : 'images_questions';
+            return `${directory}/${safeName}`;
+        };
 
         const setAppImageState = ({ file = null, data = null } = {}) => {
             if (type === 'question') {
@@ -96,8 +130,8 @@ export class UIManager {
             }
             showPreview(dataUrl);
             textInput.value = '';
-            setStatus(label);
-            setAppImageState({ file: null, data: dataUrl });
+            setStatus(`${label} Fournissez un fichier ou un lien pour l'export.`);
+            setAppImageState({ file: null, data: null });
         };
 
         const useExternalPath = (value) => {
@@ -107,9 +141,11 @@ export class UIManager {
                 return;
             }
 
-            const resolvedUrl = this.app.github.getImageUrl(trimmed, type);
+            const repositoryPath = normaliseToRepositoryPath(trimmed);
+            const resolvedUrl = this.app.github.getImageUrl(repositoryPath, resolveImageType());
             showPreview(resolvedUrl);
-            setStatus('Chemin personnalisé appliqué.');
+            textInput.value = repositoryPath;
+            setStatus('Chemin référencé pour le dépôt.');
             setAppImageState({ file: null, data: null });
         };
 
@@ -119,11 +155,12 @@ export class UIManager {
             }
             try {
                 const dataUrl = await this.readFileAsDataURL(file);
+                const repositoryPath = normaliseToRepositoryPath(buildRelativePathFromFile(file.name));
                 showPreview(dataUrl);
-                textInput.value = file.name;
+                textInput.value = repositoryPath;
                 const origin = originLabel || 'importée';
-                setStatus(`Image ${origin} et prête à être sauvegardée.`);
-                setAppImageState({ file, data: dataUrl });
+                setStatus(`Image ${origin} et référencée sous ${repositoryPath}.`);
+                setAppImageState({ file: null, data: null });
             } catch (error) {
                 console.error('Impossible de lire le fichier image sélectionné', error);
                 setStatus('Échec de la lecture du fichier image.');
@@ -221,11 +258,11 @@ export class UIManager {
             }
 
             if (typeof value === 'string' && value.startsWith('data:')) {
-                useDataUrl(value, { label: 'Image intégrée (collée ou importée).' });
+                useDataUrl(value, { label: 'Aperçu d\'une image intégrée.' });
             } else {
-                const simplified = this.app.github.simplifyImagePath(value, type);
-                textInput.value = simplified;
-                useExternalPath(simplified);
+                const repositoryPath = normaliseToRepositoryPath(value);
+                textInput.value = repositoryPath;
+                useExternalPath(repositoryPath);
             }
         };
 
@@ -483,6 +520,54 @@ export class UIManager {
         container.classList.add('hidden');
         container.setAttribute('aria-hidden', 'true');
     }
+
+    showImportExportModal() {
+        const modal = document.getElementById('import-export-modal');
+        if (!modal) {
+            return;
+        }
+
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.classList.add('modal-open');
+        }
+
+        const closeButton = document.getElementById('close-import-export');
+        closeButton?.focus();
+
+        if (!this.importExportKeyHandler) {
+            this.importExportKeyHandler = (event) => {
+                if (event.key === 'Escape') {
+                    this.hideImportExportModal();
+                }
+            };
+            document.addEventListener('keydown', this.importExportKeyHandler);
+        }
+    }
+
+    hideImportExportModal() {
+        const modal = document.getElementById('import-export-modal');
+        if (!modal) {
+            return;
+        }
+
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.classList.remove('modal-open');
+        }
+
+        if (this.importExportKeyHandler) {
+            document.removeEventListener('keydown', this.importExportKeyHandler);
+            this.importExportKeyHandler = null;
+        }
+
+        const trigger = document.getElementById('import-export-trigger');
+        trigger?.focus();
+    }
     
     // Dans ui.js, modifiez la méthode showCardEditor
     showCardEditor(card = null) {
@@ -604,15 +689,6 @@ export class UIManager {
             this.app.setCurrentCSV(csvName);
         });
         
-        // Bouton nouvelle carte
-        document.getElementById('add-card-btn').addEventListener('click', () => {
-            if (this.app.currentCSV === 'default') {
-                alert('Veuillez d\'abord sélectionner ou créer un fichier CSV');
-                return;
-            }
-            this.showCardEditor();
-        });
-        
         // Soumission du formulaire
         document.getElementById('card-form').addEventListener('submit', (e) => {
             e.preventDefault();
@@ -658,84 +734,25 @@ export class UIManager {
                 this.app.saveFlashcards();
             }
         });
-        
-        // Créer un nouveau CSV
-        document.getElementById('create-csv').addEventListener('click', () => {
-            document.getElementById('new-csv-form').classList.remove('hidden');
-        });
-        
-        // Sauvegarder un nouveau CSV
-        document.getElementById('save-new-csv').addEventListener('click', () => {
-            const newName = document.getElementById('new-csv-name').value.trim();
-            if (newName) {
-                const csvName = newName.endsWith('.csv') ? newName : `${newName}.csv`;
-                
-                // Ajouter au sélecteur
-                const selector = document.getElementById('csv-selector');
-                const option = document.createElement('option');
-                option.value = csvName;
-                option.textContent = csvName;
-                selector.appendChild(option);
-                selector.value = csvName;
-                
-                // Sauvegarder la liste
-                this.app.crud.saveCSVList();
-                
-                // Cacher le formulaire
-                document.getElementById('new-csv-form').classList.add('hidden');
-                document.getElementById('new-csv-name').value = '';
-                
-                // Charger le nouveau CSV
-                this.app.setCurrentCSV(csvName);
-                this.app.flashcards = [];
-                this.app.saveFlashcards();
-                
-                alert(`Fichier "${csvName}" créé avec succès!`);
-            } else {
-                alert('Veuillez entrer un nom valide');
-            }
-        });
-        
-        // Exporter en CSV
-        document.getElementById('download-csv').addEventListener('click', () => {
-            if (this.app.currentCSV === 'default') {
-                alert('Veuillez d\'abord sélectionner ou créer un fichier CSV');
-                return;
-            }
-            this.app.crud.exportToCSV();
-        });
-        
-        // Importer un CSV
-        document.getElementById('import-csv').addEventListener('click', () => {
-            document.getElementById('csv-file').click();
-        });
-        
-        document.getElementById('csv-file').addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                // Demander le nom du fichier
-                const fileName = prompt('Entrez un nom pour ce fichier CSV:', 
-                    e.target.files[0].name.endsWith('.csv') 
-                        ? e.target.files[0].name 
-                        : `${e.target.files[0].name}.csv`);
-                
-                if (fileName) {
-                    // Ajouter au sélecteur
-                    const selector = document.getElementById('csv-selector');
-                    const option = document.createElement('option');
-                    option.value = fileName;
-                    option.textContent = fileName;
-                    selector.appendChild(option);
-                    selector.value = fileName;
-                    
-                    // Sauvegarder la liste
-                    this.app.crud.saveCSVList();
-                    
-                    // Importer les données
-                    this.app.crud.importFromCSV(e.target.files[0]);
+        const importExportTrigger = document.getElementById('import-export-trigger');
+        const importExportModal = document.getElementById('import-export-modal');
+        const closeImportExport = document.getElementById('close-import-export');
+
+        if (importExportTrigger && importExportModal) {
+            importExportTrigger.addEventListener('click', () => {
+                this.showImportExportModal();
+            });
+
+            closeImportExport?.addEventListener('click', () => {
+                this.hideImportExportModal();
+            });
+
+            importExportModal.addEventListener('click', (event) => {
+                if (event.target === importExportModal) {
+                    this.hideImportExportModal();
                 }
-            }
-        });
- 
+            });
+        }
 
         this.imageFieldControllers.question = this.setupImageField('question');
         this.imageFieldControllers.answer = this.setupImageField('answer');
