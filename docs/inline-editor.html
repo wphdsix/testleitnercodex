@@ -617,17 +617,34 @@
             if (!trimmed) {
                 return '';
             }
+            const normalisePath = (path) => {
+                const withForwardSlashes = path.replace(/\\/g, '/');
+                let decoded = withForwardSlashes;
+                try {
+                    decoded = decodeURIComponent(withForwardSlashes);
+                } catch (error) {
+                    // Garder la valeur initiale si elle n'est pas une chaîne encodée URI valide
+                }
+                return decoded
+                    .replace(/^(?:\.\/)?/, '')
+                    .replace(/^(images_questions|images_reponses)\//, '');
+            };
             try {
                 const parsed = new URL(trimmed);
                 if (parsed.hostname === 'raw.githubusercontent.com') {
-                    const segments = parsed.pathname.split('/');
-                    const filename = segments[segments.length - 1];
+                    const segments = parsed.pathname.split('/').filter((segment) => segment.length > 0);
+                    const folderIndex = segments.findIndex((segment) => segment === 'images_questions' || segment === 'images_reponses');
+                    if (folderIndex !== -1 && folderIndex < segments.length - 1) {
+                        const pathSegments = segments.slice(folderIndex + 1).map((segment) => decodeURIComponent(segment));
+                        return normalisePath(pathSegments.join('/'));
+                    }
+                    const filename = segments[segments.length - 1] || '';
                     return decodeURIComponent(filename);
                 }
             } catch (error) {
                 // Laisser la valeur telle quelle lorsqu'elle n'est pas une URL valide
             }
-            return trimmed;
+            return normalisePath(trimmed);
         }
 
         function parseCsv(text) {
@@ -699,7 +716,11 @@
                 return '';
             }
             const folder = type === 'question' ? 'images_questions' : 'images_reponses';
-            return `https://raw.githubusercontent.com/${encodeURIComponent(username)}/${encodeURIComponent(repository)}/${encodeURIComponent(branch)}/${folder}/${encodeURIComponent(filename).replace(/%2F/g, '/')}`;
+            const cleanedFilename = filename.trim()
+                .replace(/\\/g, '/')
+                .replace(/^(?:\.\/)?/, '')
+                .replace(/^(images_questions|images_reponses)\//, '');
+            return `https://raw.githubusercontent.com/${encodeURIComponent(username)}/${encodeURIComponent(repository)}/${encodeURIComponent(branch)}/${folder}/${encodeURIComponent(cleanedFilename).replace(/%2F/g, '/')}`;
         }
 
         function showStatus(type, message) {
