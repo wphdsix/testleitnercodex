@@ -796,6 +796,7 @@ export class UIManager {
             });
         }
 
+        const csvSelector = document.getElementById('csv-selector');
         if (csvSelector) {
             this.keyboardManager.registerShortcut('ctrl+shift+l', () => {
                 csvSelector.focus();
