@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'leitner-offline-cache-v1';
+const CACHE_VERSION = 'leitner-offline-cache-v2';
 const CACHE_NAME = `${CACHE_VERSION}`;
 const BASE_URL = new URL('../..', self.location);
 const OFFLINE_FALLBACK_PAGE = 'index.html';
