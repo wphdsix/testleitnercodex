@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Import / Export avancé - Leitner Codex</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 20px;
+      background-color: #f9f9fb;
+      color: #333;
+    }
+    h1 {
+      color: #2c3e50;
+    }
+    .actions {
+      margin: 1.5rem 0;
+    }
+    button {
+      padding: 8px 16px;
+      margin: 4px 8px 4px 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #e9ecef;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border: 1px solid #ddd;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 6px;
+      box-sizing: border-box;
+      font-family: inherit;
+    }
+    textarea {
+      min-height: 60px;
+      resize: vertical;
+    }
+    .card-section {
+      margin-bottom: 2rem;
+      padding: 1rem;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      background: #fff;
+    }
+    hr {
+      margin: 1.5rem 0;
+      border: 0;
+      border-top: 1px solid #eee;
+    }
+  </style>
+</head>
+<body>
+  <h1>Import / Export avancé</h1>
+
+  <div class="actions">
+    <button id="addCard">➕ Ajouter une flashcard</button>
+    <button id="exportBtn">📤 Exporter en CSV</button>
+    <input type="file" id="importCsv" accept=".csv" style="display: inline-block; width: auto;" />
+    <button id="importBtn">📥 Importer depuis CSV</button>
+  </div>
+
+  <div id="cardsContainer"></div>
+
+  <script src="src/ui/import-export.js"></script>
+</body>
+</html>
