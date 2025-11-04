@@ -25,6 +25,29 @@ function bootstrap() {
     });
     tabNavigation.init();
 
+    const advancedButton = document.getElementById('open-import-export');
+    if (advancedButton) {
+        const openAdvancedPage = () => {
+            if (typeof window.openImportExport === 'function') {
+                window.openImportExport();
+            }
+        };
+
+        advancedButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            openAdvancedPage();
+        });
+
+        keyboardManager.registerShortcut('ctrl+-', () => {
+            advancedButton.focus();
+            openAdvancedPage();
+        }, {
+            description: 'Ouvrir la page Import / Export avancé',
+            element: advancedButton,
+            global: true
+        });
+    }
+
     const app = new LeitnerApp({ tabRouter, keyboardManager });
     window.leitnerApp = app;
 
