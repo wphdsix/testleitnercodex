@@ -724,13 +724,6 @@ export class UIManager {
 
             const downloadUrl = selectedOption.dataset.downloadUrl;
             if (downloadUrl) {
-                const isLocal = !!this.app.github?.localBaseUrl && downloadUrl.startsWith(this.app.github.localBaseUrl);
-                const sourceLabel = isLocal ? 'le dossier local' : 'GitHub';
-                const shouldLoad = confirm(`Voulez-vous charger le fichier "${selectedCSV}" depuis ${sourceLabel} ?`);
-                if (!shouldLoad) {
-                    return;
-                }
-
                 await this.app.loadCSVFromURL(downloadUrl, selectedCSV);
                 return;
             }
