@@ -4,8 +4,107 @@ export class UIManager {
         this.boxClickHandler = null;
         this.keyboardManager = app?.keyboardManager || null;
         this.imageFieldControllers = {};
+        this.csvStatusElement = document.getElementById('csv-load-status');
+        this.csvReloadTimeout = null;
         this.bindEvents();
         this.registerKeyboardShortcuts();
+    }
+
+    cancelScheduledCSVReload() {
+        if (this.csvReloadTimeout) {
+            clearTimeout(this.csvReloadTimeout);
+            this.csvReloadTimeout = null;
+        }
+    }
+
+    scheduleCSVReload(delay = 1200) {
+        this.cancelScheduledCSVReload();
+        this.csvReloadTimeout = window.setTimeout(() => {
+            window.location.reload();
+        }, delay);
+    }
+
+    updateCSVStatus(message, tone = 'neutral') {
+        if (!this.csvStatusElement) {
+            return;
+        }
+
+        const toneClasses = ['text-green-600', 'text-red-600', 'text-gray-600'];
+
+        if (!message) {
+            this.csvStatusElement.textContent = '';
+            this.csvStatusElement.classList.add('hidden');
+            toneClasses.forEach(cls => this.csvStatusElement.classList.remove(cls));
+            this.cancelScheduledCSVReload();
+            return;
+        }
+
+        const toneClass = tone === 'error'
+            ? 'text-red-600'
+            : tone === 'success'
+                ? 'text-green-600'
+                : 'text-gray-600';
+
+        this.csvStatusElement.classList.remove('hidden');
+        toneClasses.forEach(cls => this.csvStatusElement.classList.remove(cls));
+        this.csvStatusElement.classList.add(toneClass);
+        this.csvStatusElement.textContent = message;
+    }
+
+    announceCSVLoaded(csvName) {
+        this.updateCSVStatus(`Le fichier CSV « ${csvName} » a été chargé avec succès. Actualisation de la page...`, 'success');
+        this.scheduleCSVReload();
+    }
+
+    announceCSVLoadError(csvName, detail = '') {
+        const suffix = detail ? ` : ${detail}` : '';
+        this.updateCSVStatus(`Impossible de charger le fichier CSV « ${csvName} »${suffix}.`, 'error');
+    }
+
+    async loadSelectedCSV(option) {
+        const csvName = option?.value;
+
+        if (!csvName || csvName === 'default') {
+            this.app.setCurrentCSV('default');
+            this.app.flashcards = [];
+            this.app.refreshBoxes();
+            this.updateCSVStatus('');
+            return false;
+        }
+
+        const downloadUrl = option.dataset.downloadUrl;
+
+        try {
+            let loaded = false;
+
+            if (downloadUrl) {
+                loaded = await this.app.loadCSVFromURL(downloadUrl, csvName);
+                if (!loaded) {
+                    this.announceCSVLoadError(csvName);
+                    return false;
+                }
+            } else {
+                loaded = this.app.crud.loadFlashcards(csvName);
+
+                if (!loaded) {
+                    this.app.setCurrentCSV(csvName);
+                    this.app.flashcards = [];
+                    this.app.saveFlashcards();
+                    loaded = true;
+                }
+            }
+
+            if (loaded) {
+                this.announceCSVLoaded(csvName);
+            }
+
+            return loaded;
+        } catch (error) {
+            console.error('Erreur lors du chargement du CSV sélectionné', error);
+            this.announceCSVLoadError(csvName, error?.message);
+            alert(`Erreur de chargement du fichier "${csvName}": ${error.message}`);
+            return false;
+        }
     }
 
     readFileAsDataURL(file) {
@@ -662,30 +761,7 @@ export class UIManager {
         const csvSelector = document.getElementById('csv-selector');
         csvSelector.addEventListener('change', async (e) => {
             const selectedOption = e.target.options[e.target.selectedIndex];
-            const csvName = selectedOption?.value;
-
-            if (!csvName || csvName === 'default') {
-                this.app.setCurrentCSV('default');
-                this.app.flashcards = [];
-                this.app.refreshBoxes();
-                return;
-            }
-
-            const downloadUrl = selectedOption.dataset.downloadUrl;
-
-            try {
-                if (downloadUrl) {
-                    await this.app.loadCSVFromURL(downloadUrl, csvName);
-                } else if (!this.app.crud.loadFlashcards(csvName)) {
-                    this.app.setCurrentCSV(csvName);
-                    this.app.flashcards = [];
-                    this.app.saveFlashcards();
-                    this.app.refreshBoxes();
-                }
-            } catch (error) {
-                console.error('Erreur lors du chargement du CSV sélectionné', error);
-                alert(`Erreur de chargement du fichier "${csvName}": ${error.message}`);
-            }
+            await this.loadSelectedCSV(selectedOption);
         });
         
         // Lien Import/Export vers l'éditeur plein écran
@@ -715,34 +791,13 @@ export class UIManager {
         document.getElementById('load-csv').addEventListener('click', async () => {
             const selector = document.getElementById('csv-selector');
             const selectedOption = selector.options[selector.selectedIndex];
-            const selectedCSV = selectedOption?.value;
 
-            if (!selectedCSV || selectedCSV === 'default') {
+            if (!selectedOption || !selectedOption.value || selectedOption.value === 'default') {
                 alert('Veuillez sélectionner un fichier CSV');
                 return;
             }
 
-            const downloadUrl = selectedOption.dataset.downloadUrl;
-            if (downloadUrl) {
-                const isLocal = !!this.app.github?.localBaseUrl && downloadUrl.startsWith(this.app.github.localBaseUrl);
-                const sourceLabel = isLocal ? 'le dossier local' : 'GitHub';
-                const shouldLoad = confirm(`Voulez-vous charger le fichier "${selectedCSV}" depuis ${sourceLabel} ?`);
-                if (!shouldLoad) {
-                    return;
-                }
-
-                await this.app.loadCSVFromURL(downloadUrl, selectedCSV);
-                return;
-            }
-
-            if (this.app.crud.loadFlashcards(selectedCSV)) {
-                alert(`Fichier "${selectedCSV}" chargé avec ${this.app.flashcards.length} cartes`);
-            } else {
-                alert(`Création d'un nouveau fichier "${selectedCSV}"`);
-                this.app.setCurrentCSV(selectedCSV);
-                this.app.flashcards = [];
-                this.app.saveFlashcards();
-            }
+            await this.loadSelectedCSV(selectedOption);
         });
 
         this.imageFieldControllers.question = this.setupImageField('question');
