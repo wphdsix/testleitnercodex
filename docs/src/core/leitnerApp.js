@@ -332,10 +332,11 @@ export class LeitnerApp {
     async loadCSVFromURL(url, csvName) {
         try {
             const csvContent = await this.github.loadCSVContent(url);
-            this.parseAndLoadCSV(csvContent, csvName);
+            return this.parseAndLoadCSV(csvContent, csvName);
         } catch (error) {
             console.error('Erreur de chargement du CSV:', error);
             alert('Erreur de chargement: ' + error.message);
+            return false;
         }
     }
 
@@ -361,8 +362,10 @@ export class LeitnerApp {
             }));
             this.setCurrentCSV(csvName);
             this.saveFlashcards();
+            return true;
         } else {
             alert('Aucune carte valide trouvée dans le fichier CSV');
+            return false;
         }
     }
 
