@@ -73,12 +73,6 @@ export class GitHubManager {
     }
 
     async loadCSVList() {
-        const localFiles = await this.loadLocalCSVList();
-        if (localFiles.length > 0) {
-            this.csvFiles = localFiles;
-            return this.csvFiles;
-        }
-
         const repoPath = this.normaliseRepoPath(this.config.repoPath || '');
         const baseEndpoint = `/contents${repoPath || ''}`;
         const branches = this.buildBranchFallbacks();
@@ -92,9 +86,17 @@ export class GitHubManager {
                     continue;
                 }
 
-                this.csvFiles = contents.filter(item =>
-                    item.type === 'file' && item.name && item.name.toLowerCase().endsWith('.csv')
-                );
+                const resolvedBranch = branch || this.config.repoBranch || 'main';
+                this.csvFiles = contents
+                    .filter(item => item.type === 'file' && item.name && item.name.toLowerCase().endsWith('.csv'))
+                    .map(item => ({
+                        ...item,
+                        download_url: item.download_url
+                            || `https://raw.githubusercontent.com/${this.config.repoOwner}/${this.config.repoName}/${resolvedBranch}/${(item.path || item.name)
+                                .split('/')
+                                .map(segment => encodeURIComponent(segment))
+                                .join('/')}`
+                    }));
 
                 this.localBaseUrl = null;
 
@@ -112,6 +114,16 @@ export class GitHubManager {
                     break;
                 }
             }
+        }
+
+        try {
+            const localFiles = await this.loadLocalCSVList();
+            if (localFiles.length > 0) {
+                this.csvFiles = localFiles;
+                return this.csvFiles;
+            }
+        } catch (error) {
+            lastError = lastError || error;
         }
 
         console.error('Erreur de chargement de la liste CSV:', lastError);

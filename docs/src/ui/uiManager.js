@@ -660,16 +660,32 @@ export class UIManager {
         
         // Sélection d'un fichier CSV
         const csvSelector = document.getElementById('csv-selector');
-        csvSelector.addEventListener('change', (e) => {
+        csvSelector.addEventListener('change', async (e) => {
             const selectedOption = e.target.options[e.target.selectedIndex];
             const csvName = selectedOption?.value;
 
             if (!csvName || csvName === 'default') {
                 this.app.setCurrentCSV('default');
+                this.app.flashcards = [];
+                this.app.refreshBoxes();
                 return;
             }
 
-            this.app.setCurrentCSV(csvName);
+            const downloadUrl = selectedOption.dataset.downloadUrl;
+
+            try {
+                if (downloadUrl) {
+                    await this.app.loadCSVFromURL(downloadUrl, csvName);
+                } else if (!this.app.crud.loadFlashcards(csvName)) {
+                    this.app.setCurrentCSV(csvName);
+                    this.app.flashcards = [];
+                    this.app.saveFlashcards();
+                    this.app.refreshBoxes();
+                }
+            } catch (error) {
+                console.error('Erreur lors du chargement du CSV sélectionné', error);
+                alert(`Erreur de chargement du fichier "${csvName}": ${error.message}`);
+            }
         });
         
         // Lien Import/Export vers l'éditeur plein écran
