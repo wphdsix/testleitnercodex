@@ -361,8 +361,6 @@ export class LeitnerApp {
             }));
             this.setCurrentCSV(csvName);
             this.saveFlashcards();
-
-            alert(`${importedCards.length} cartes chargées depuis ${csvName}`);
         } else {
             alert('Aucune carte valide trouvée dans le fichier CSV');
         }

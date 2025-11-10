@@ -728,10 +728,7 @@ export class UIManager {
                 return;
             }
 
-            if (this.app.crud.loadFlashcards(selectedCSV)) {
-                alert(`Fichier "${selectedCSV}" chargé avec ${this.app.flashcards.length} cartes`);
-            } else {
-                alert(`Création d'un nouveau fichier "${selectedCSV}"`);
+            if (!this.app.crud.loadFlashcards(selectedCSV)) {
                 this.app.setCurrentCSV(selectedCSV);
                 this.app.flashcards = [];
                 this.app.saveFlashcards();
