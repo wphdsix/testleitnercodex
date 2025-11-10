@@ -798,6 +798,17 @@ export class UIManager {
             }
 
             await this.loadSelectedCSV(selectedOption);
+            const downloadUrl = selectedOption.dataset.downloadUrl;
+            if (downloadUrl) {
+                await this.app.loadCSVFromURL(downloadUrl, selectedCSV);
+                return;
+            }
+
+            if (!this.app.crud.loadFlashcards(selectedCSV)) {
+                this.app.setCurrentCSV(selectedCSV);
+                this.app.flashcards = [];
+                this.app.saveFlashcards();
+            }
         });
 
         this.imageFieldControllers.question = this.setupImageField('question');
