@@ -724,21 +724,11 @@ export class UIManager {
 
             const downloadUrl = selectedOption.dataset.downloadUrl;
             if (downloadUrl) {
-                const isLocal = !!this.app.github?.localBaseUrl && downloadUrl.startsWith(this.app.github.localBaseUrl);
-                const sourceLabel = isLocal ? 'le dossier local' : 'GitHub';
-                const shouldLoad = confirm(`Voulez-vous charger le fichier "${selectedCSV}" depuis ${sourceLabel} ?`);
-                if (!shouldLoad) {
-                    return;
-                }
-
                 await this.app.loadCSVFromURL(downloadUrl, selectedCSV);
                 return;
             }
 
-            if (this.app.crud.loadFlashcards(selectedCSV)) {
-                alert(`Fichier "${selectedCSV}" chargé avec ${this.app.flashcards.length} cartes`);
-            } else {
-                alert(`Création d'un nouveau fichier "${selectedCSV}"`);
+            if (!this.app.crud.loadFlashcards(selectedCSV)) {
                 this.app.setCurrentCSV(selectedCSV);
                 this.app.flashcards = [];
                 this.app.saveFlashcards();
