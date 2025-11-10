@@ -85,8 +85,8 @@ export class LeitnerApp {
         }
     }
 
-    loadConfig() {
-        const defaultConfig = {
+    detectDefaultRepositoryConfig() {
+        const fallback = {
             repoOwner: 'leitexper1',
             repoName: 'leitexp',
             repoPath: 'docs/',
@@ -94,6 +94,41 @@ export class LeitnerApp {
             githubToken: ''
         };
 
+        if (typeof window === 'undefined') {
+            return { ...fallback };
+        }
+
+        try {
+            const { hostname, pathname } = window.location;
+            const result = { ...fallback };
+
+            if (hostname.endsWith('github.io')) {
+                const ownerCandidate = hostname.split('.')[0];
+                if (ownerCandidate) {
+                    result.repoOwner = ownerCandidate;
+                }
+
+                const pathSegments = pathname.split('/').filter(Boolean);
+                if (pathSegments.length > 0) {
+                    result.repoName = pathSegments[0];
+
+                    const docsIndex = pathSegments.findIndex(segment => segment.toLowerCase() === 'docs');
+                    if (docsIndex !== -1) {
+                        const pathAfterDocs = pathSegments.slice(docsIndex).join('/');
+                        result.repoPath = pathAfterDocs ? `${pathAfterDocs.replace(/\/+$/, '')}/` : 'docs/';
+                    }
+                }
+            }
+
+            return result;
+        } catch (error) {
+            console.warn('Impossible de détecter le dépôt GitHub par défaut', error);
+            return { ...fallback };
+        }
+    }
+
+    loadConfig() {
+        const defaultConfig = this.detectDefaultRepositoryConfig();
         const savedConfig = this.storage.getJSON('leitnerConfig', {});
         const config = { ...defaultConfig, ...savedConfig };
 
