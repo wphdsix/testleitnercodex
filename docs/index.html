@@ -32,10 +32,22 @@
 
     return payload.tree
       .filter(item => item.type === 'blob' && item.path.startsWith(folderPrefix) && item.path.endsWith('.csv'))
-      .map(item => ({
-        name: item.path.substring(folderPrefix.length),
-        publicPath: item.path.startsWith('docs/') ? item.path.substring(5) : item.path
-      }))
+      .map(item => {
+        const relativePath = item.path.substring(folderPrefix.length);
+        const publicPath = item.path.startsWith('docs/') ? item.path.substring(5) : item.path;
+        const encodedPath = item.path
+          .split('/')
+          .map(segment => encodeURIComponent(segment))
+          .join('/');
+        const downloadUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodedPath}`;
+
+        return {
+          name: relativePath,
+          publicPath,
+          download_url: downloadUrl,
+          source: 'github'
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
   }
 
@@ -68,6 +80,21 @@
             return name && publicPath ? { name, publicPath } : null;
           })
           .filter(Boolean)
+          .map(file => {
+            let downloadUrl = '';
+            try {
+              downloadUrl = new URL(file.publicPath, window.location.href).href;
+            } catch (error) {
+              console.warn('Impossible de résoudre le chemin CSV local', file.publicPath, error);
+            }
+
+            return {
+              ...file,
+              download_url: downloadUrl,
+              source: 'manifest'
+            };
+          })
+          .filter(file => !!file.download_url)
           .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 
         if (files.length > 0) {
@@ -85,16 +112,43 @@
     select.innerHTML = '';
 
     if (!csvFiles.length) {
-      select.innerHTML = '<option value="">Aucun fichier .csv trouvé</option>';
+      const emptyOption = document.createElement('option');
+      emptyOption.value = 'default';
+      emptyOption.dataset.role = 'placeholder';
+      emptyOption.textContent = 'Aucun fichier .csv trouvé';
+      select.appendChild(emptyOption);
+      select.value = 'default';
       return;
     }
 
-    csvFiles.forEach(file => {
+    const placeholder = document.createElement('option');
+    placeholder.value = 'default';
+    placeholder.dataset.role = 'placeholder';
+    placeholder.textContent = 'Sélectionner un fichier CSV';
+    select.appendChild(placeholder);
+
+    csvFiles.forEach((file, index) => {
       const option = document.createElement('option');
-      option.value = file.publicPath;
-      option.textContent = file.name;
+      const name = file.name || file.publicPath || `csv-${index + 1}`;
+      option.value = name;
+      option.textContent = name;
+
+      if (file.download_url) {
+        option.dataset.downloadUrl = file.download_url;
+      }
+
+      if (file.publicPath) {
+        option.dataset.publicPath = file.publicPath;
+      }
+
+      option.dataset.source = file.source || '';
       select.appendChild(option);
     });
+
+    const defaultSelection = csvFiles[0]?.name;
+    if (defaultSelection) {
+      select.value = defaultSelection;
+    }
   }
 
   async function loadCsvFiles() {
@@ -108,18 +162,31 @@
 
     try {
       let csvFiles = [];
+      let source = 'github';
 
       try {
         csvFiles = await fetchCsvFilesFromGitHub();
       } catch (error) {
-        console.warn('Chargement via GitHub impossible, utilisation du manifeste local.', error);
+        console.warn('Chargement via GitHub impossible, tentative avec le manifeste local.', error);
+        source = 'manifest';
       }
 
       if (!csvFiles.length) {
         csvFiles = await fetchCsvFilesFromManifest();
+        source = 'manifest';
       }
 
       populateCsvSelect(select, csvFiles);
+
+      if (Array.isArray(csvFiles) && csvFiles.length > 0) {
+        select.dataset.bootstrapSource = source;
+        window.__leitnerCSVBootstrap = {
+          files: csvFiles.map(file => ({ ...file })),
+          source,
+          selectedName: select.value !== 'default' ? select.value : null,
+          timestamp: Date.now()
+        };
+      }
     } catch (err) {
       console.error('Impossible de charger les fichiers CSV :', err);
       select.innerHTML = '<option value="">Erreur de chargement</option>';
@@ -134,8 +201,12 @@
 
   function openImportExport() {
     const select = document.getElementById('csv-selector');
-    const selectedFile = select?.value;
-    if (!selectedFile) {
+    const selectedOption = select?.selectedOptions?.[0];
+    const selectedFile = selectedOption?.dataset?.downloadUrl
+      || selectedOption?.dataset?.publicPath
+      || selectedOption?.value;
+
+    if (!selectedFile || selectedFile === 'default') {
       alert('Veuillez sélectionner un fichier CSV.');
       return;
     }

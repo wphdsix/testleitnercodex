@@ -278,6 +278,100 @@ export class LeitnerApp {
         this.refreshBoxes();
     }
 
+    resolveFallbackDownloadUrl(rawPath = '') {
+        const value = (rawPath || '').trim();
+
+        if (!value) {
+            return '';
+        }
+
+        if (/^(https?:)?\/\//i.test(value) || value.startsWith('data:')) {
+            return value;
+        }
+
+        const cleaned = value.replace(/^\.\/+/, '').replace(/^\/+/, '');
+
+        const baseUrl = this.github?.localBaseUrl
+            || (typeof window !== 'undefined' ? window.location.href : '');
+
+        if (!baseUrl) {
+            return cleaned;
+        }
+
+        try {
+            const resolved = new URL(cleaned, baseUrl);
+            return resolved.href;
+        } catch (error) {
+            console.warn('Impossible de résoudre le chemin CSV de secours', rawPath, error);
+            return cleaned;
+        }
+    }
+
+    async applyBootstrapCSVFallback() {
+        if (typeof window === 'undefined') {
+            return false;
+        }
+
+        const bootstrap = window.__leitnerCSVBootstrap;
+        if (!bootstrap || !Array.isArray(bootstrap.files) || bootstrap.files.length === 0) {
+            return false;
+        }
+
+        const files = bootstrap.files
+            .map((file) => {
+                const name = file?.name || file?.publicPath || '';
+                const publicPath = file?.publicPath || '';
+                const downloadUrl = file?.download_url
+                    || this.resolveFallbackDownloadUrl(publicPath || file?.name || '');
+
+                if (!name || !downloadUrl) {
+                    return null;
+                }
+
+                return {
+                    name,
+                    download_url: downloadUrl,
+                    publicPath,
+                    source: file?.source || bootstrap.source || 'manifest'
+                };
+            })
+            .filter(Boolean);
+
+        if (!files.length) {
+            return false;
+        }
+
+        const preferredName = this.getPreferredCSVName(files[0].name);
+        const bootstrapSelection = bootstrap.selectedName || null;
+        const candidateNames = [preferredName, bootstrapSelection, files[0].name]
+            .filter((value, index, array) => value && array.indexOf(value) === index);
+        const preferredFile = candidateNames
+            .map(name => files.find(file => file.name === name))
+            .find(Boolean)
+            || files[0];
+
+        this.github.csvFiles = files;
+        this.storage.setJSON('leitnerCSVList', files.map(file => file.name));
+        this.ui.populateCSVSelector(files, { selectedName: preferredFile.name });
+
+        let loaded = false;
+        if (preferredFile.download_url) {
+            loaded = await this.loadCSVFromURL(preferredFile.download_url, preferredFile.name);
+        }
+
+        if (!loaded && this.crud.loadFlashcards(preferredFile.name)) {
+            return true;
+        }
+
+        if (!loaded) {
+            this.setCurrentCSV(preferredFile.name);
+            this.flashcards = [];
+            this.refreshBoxes();
+        }
+
+        return true;
+    }
+
     async loadCSVFromGitHub() {
         try {
             await this.github.loadCSVList();
@@ -300,7 +394,11 @@ export class LeitnerApp {
             }
         } catch (error) {
             console.error('Erreur de chargement depuis GitHub:', error);
-            this.loadCSVFromCache();
+            const fallbackApplied = await this.applyBootstrapCSVFallback();
+
+            if (!fallbackApplied) {
+                this.loadCSVFromCache();
+            }
         }
     }
 
