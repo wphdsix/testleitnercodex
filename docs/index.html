@@ -11,56 +11,115 @@
     <!-- <link rel="icon" href="favicon.ico" type="image/x-icon"> -->
 </head>
 <script>
-  async function loadCsvFiles() {
-    const select = document.getElementById('csv-selector');
-    if (!select) {
-      return;
-    }
-
+  async function fetchCsvFilesFromGitHub() {
     const owner = 'leitexper1';
     const repo = 'testleitnercodex';
     const branch = 'main';
     const folderPath = 'docs';
     const folderPrefix = folderPath.endsWith('/') ? folderPath : `${folderPath}/`;
 
+    const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+    const response = await fetch(treeUrl);
+
+    if (!response.ok) {
+      throw new Error(`Erreur API GitHub : ${response.status}`);
+    }
+
+    const payload = await response.json();
+    if (!payload?.tree) {
+      throw new Error('Réponse inattendue de l’API GitHub.');
+    }
+
+    return payload.tree
+      .filter(item => item.type === 'blob' && item.path.startsWith(folderPrefix) && item.path.endsWith('.csv'))
+      .map(item => ({
+        name: item.path.substring(folderPrefix.length),
+        publicPath: item.path.startsWith('docs/') ? item.path.substring(5) : item.path
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  }
+
+  async function fetchCsvFilesFromManifest() {
+    const manifestCandidates = ['csv-files.json', 'csv_manifest.json', '__csv_manifest.json'];
+
+    for (const manifestName of manifestCandidates) {
+      try {
+        const response = await fetch(manifestName, { cache: 'no-store' });
+        if (!response.ok) {
+          continue;
+        }
+
+        const payload = await response.json();
+        const entries = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.files)
+            ? payload.files
+            : [];
+
+        const files = entries
+          .map(entry => {
+            if (typeof entry === 'string') {
+              return { name: entry, publicPath: entry };
+            }
+
+            const name = entry?.name || entry?.path || '';
+            const publicPath = entry?.publicPath || entry?.path || entry?.name || '';
+
+            return name && publicPath ? { name, publicPath } : null;
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+
+        if (files.length > 0) {
+          return files;
+        }
+      } catch (error) {
+        console.warn(`Lecture du manifeste CSV local échouée (${manifestName})`, error);
+      }
+    }
+
+    return [];
+  }
+
+  function populateCsvSelect(select, csvFiles) {
+    select.innerHTML = '';
+
+    if (!csvFiles.length) {
+      select.innerHTML = '<option value="">Aucun fichier .csv trouvé</option>';
+      return;
+    }
+
+    csvFiles.forEach(file => {
+      const option = document.createElement('option');
+      option.value = file.publicPath;
+      option.textContent = file.name;
+      select.appendChild(option);
+    });
+  }
+
+  async function loadCsvFiles() {
+    const select = document.getElementById('csv-selector');
+    if (!select) {
+      return;
+    }
+
     select.disabled = true;
     select.innerHTML = '<option value="">Recherche des fichiers…</option>';
 
     try {
-      const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
-      const response = await fetch(treeUrl);
+      let csvFiles = [];
 
-      if (!response.ok) {
-        throw new Error(`Erreur API GitHub : ${response.status}`);
+      try {
+        csvFiles = await fetchCsvFilesFromGitHub();
+      } catch (error) {
+        console.warn('Chargement via GitHub impossible, utilisation du manifeste local.', error);
       }
 
-      const payload = await response.json();
-      if (!payload?.tree) {
-        throw new Error('Réponse inattendue de l’API GitHub.');
+      if (!csvFiles.length) {
+        csvFiles = await fetchCsvFilesFromManifest();
       }
 
-      const csvFiles = payload.tree
-        .filter(item => item.type === 'blob' && item.path.startsWith(folderPrefix) && item.path.endsWith('.csv'))
-        .map(item => ({
-          name: item.path.substring(folderPrefix.length),
-          path: item.path
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-
-      select.innerHTML = '';
-
-      if (csvFiles.length === 0) {
-        select.innerHTML = '<option value="">Aucun fichier .csv trouvé</option>';
-        return;
-      }
-
-      csvFiles.forEach(file => {
-        const option = document.createElement('option');
-        const publicPath = file.path.startsWith('docs/') ? file.path.substring(5) : file.path;
-        option.value = publicPath;
-        option.textContent = file.name;
-        select.appendChild(option);
-      });
+      populateCsvSelect(select, csvFiles);
     } catch (err) {
       console.error('Impossible de charger les fichiers CSV :', err);
       select.innerHTML = '<option value="">Erreur de chargement</option>';
