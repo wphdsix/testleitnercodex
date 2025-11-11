@@ -5,22 +5,22 @@ export class UIManager {
         this.keyboardManager = app?.keyboardManager || null;
         this.imageFieldControllers = {};
         this.csvStatusElement = document.getElementById('csv-load-status');
-        this.csvReloadTimeout = null;
+        this.csvStatusTimeout = null;
         this.bindEvents();
         this.registerKeyboardShortcuts();
     }
 
-    cancelScheduledCSVReload() {
-        if (this.csvReloadTimeout) {
-            clearTimeout(this.csvReloadTimeout);
-            this.csvReloadTimeout = null;
+    cancelScheduledCSVStatusClear() {
+        if (this.csvStatusTimeout) {
+            clearTimeout(this.csvStatusTimeout);
+            this.csvStatusTimeout = null;
         }
     }
 
-    scheduleCSVReload(delay = 1200) {
-        this.cancelScheduledCSVReload();
-        this.csvReloadTimeout = window.setTimeout(() => {
-            window.location.reload();
+    scheduleCSVStatusClear(delay = 4000) {
+        this.cancelScheduledCSVStatusClear();
+        this.csvStatusTimeout = window.setTimeout(() => {
+            this.updateCSVStatus('');
         }, delay);
     }
 
@@ -35,7 +35,7 @@ export class UIManager {
             this.csvStatusElement.textContent = '';
             this.csvStatusElement.classList.add('hidden');
             toneClasses.forEach(cls => this.csvStatusElement.classList.remove(cls));
-            this.cancelScheduledCSVReload();
+            this.cancelScheduledCSVStatusClear();
             return;
         }
 
@@ -52,24 +52,30 @@ export class UIManager {
     }
 
     announceCSVLoaded(csvName) {
-        this.updateCSVStatus(`Le fichier CSV « ${csvName} » a été chargé avec succès. Actualisation de la page...`, 'success');
-        this.scheduleCSVReload();
+        this.updateCSVStatus(`Le fichier CSV « ${csvName} » a été chargé avec succès.`, 'success');
+        this.scheduleCSVStatusClear();
     }
 
     announceCSVLoadError(csvName, detail = '') {
         const suffix = detail ? ` : ${detail}` : '';
         this.updateCSVStatus(`Impossible de charger le fichier CSV « ${csvName} »${suffix}.`, 'error');
+        this.scheduleCSVStatusClear(6000);
     }
 
     async loadSelectedCSV(option) {
         const csvName = option?.value;
 
-        if (!csvName || csvName === 'default') {
+        if (!option || option.disabled || !csvName) {
             this.app.setCurrentCSV('default');
             this.app.flashcards = [];
             this.app.refreshBoxes();
             this.updateCSVStatus('');
             return false;
+        }
+
+        if (csvName === this.app.currentCSV && this.app.flashcards.length > 0) {
+            this.updateCSVStatus('');
+            return true;
         }
 
         const downloadUrl = option.dataset.downloadUrl;
@@ -79,10 +85,6 @@ export class UIManager {
 
             if (downloadUrl) {
                 loaded = await this.app.loadCSVFromURL(downloadUrl, csvName);
-                if (!loaded) {
-                    this.announceCSVLoadError(csvName);
-                    return false;
-                }
             } else {
                 loaded = this.app.crud.loadFlashcards(csvName);
 
@@ -94,11 +96,13 @@ export class UIManager {
                 }
             }
 
-            if (loaded) {
-                this.announceCSVLoaded(csvName);
+            if (!loaded) {
+                this.announceCSVLoadError(csvName);
+                return false;
             }
 
-            return loaded;
+            this.announceCSVLoaded(csvName);
+            return true;
         } catch (error) {
             console.error('Erreur lors du chargement du CSV sélectionné', error);
             this.announceCSVLoadError(csvName, error?.message);
@@ -467,14 +471,36 @@ export class UIManager {
     populateCSVSelector(csvFiles, { selectedName = null } = {}) {
         const selector = document.getElementById('csv-selector');
 
-        // Garder l'option par défaut
-        selector.innerHTML = '<option value="default" data-role="placeholder">Sélectionner un fichier CSV</option>';
+        if (!selector) {
+            return;
+        }
 
-        // Ajouter les fichiers CSV du dépôt GitHub
-        csvFiles.forEach((file, index) => {
+        selector.innerHTML = '';
+
+        if (!Array.isArray(csvFiles) || csvFiles.length === 0) {
+            const emptyOption = document.createElement('option');
+            emptyOption.value = '';
+            emptyOption.textContent = 'Aucun fichier .csv trouvé';
+            emptyOption.disabled = true;
+            selector.appendChild(emptyOption);
+            selector.value = '';
+            selector.dataset.hasFiles = 'false';
+            selector.disabled = true;
+            return;
+        }
+
+        selector.disabled = false;
+
+        const preferredName = selectedName
+            || (this.app?.currentCSV && csvFiles.some(file => file.name === this.app.currentCSV)
+                ? this.app.currentCSV
+                : null);
+
+        csvFiles.forEach((file) => {
             const option = document.createElement('option');
             option.value = file.name;
             option.textContent = file.name;
+
             if (file.download_url) {
                 option.dataset.downloadUrl = file.download_url;
             }
@@ -485,19 +511,19 @@ export class UIManager {
                 option.dataset.source = file.source;
             }
 
-            if (selectedName) {
-                option.selected = file.name === selectedName;
-            } else if (index === 0) {
-                option.selected = true;
+            if (preferredName) {
+                option.selected = file.name === preferredName;
             }
+
             selector.appendChild(option);
         });
 
-        if (selectedName) {
-            selector.value = selectedName;
-        } else if (csvFiles.length > 0) {
-            selector.value = csvFiles[0].name;
-        }
+        const fallbackName = preferredName && csvFiles.some(file => file.name === preferredName)
+            ? preferredName
+            : csvFiles[0].name;
+
+        selector.value = fallbackName;
+        selector.dataset.hasFiles = 'true';
     }
     
     showCardsList(boxNumber, cards = []) {
@@ -765,10 +791,12 @@ export class UIManager {
         
         // Sélection d'un fichier CSV
         const csvSelector = document.getElementById('csv-selector');
-        csvSelector.addEventListener('change', async (e) => {
-            const selectedOption = e.target.options[e.target.selectedIndex];
-            await this.loadSelectedCSV(selectedOption);
-        });
+        if (csvSelector) {
+            csvSelector.addEventListener('change', async (e) => {
+                const selectedOption = e.target.options[e.target.selectedIndex];
+                await this.loadSelectedCSV(selectedOption);
+            });
+        }
         
         // Lien Import/Export vers l'éditeur plein écran
         const importExportTrigger = document.getElementById('import-export-trigger');
@@ -793,30 +821,6 @@ export class UIManager {
             });
         });
         
-        // Charger un CSV
-        document.getElementById('load-csv').addEventListener('click', async () => {
-            const selector = document.getElementById('csv-selector');
-            const selectedOption = selector.options[selector.selectedIndex];
-
-            if (!selectedOption || !selectedOption.value || selectedOption.value === 'default') {
-                alert('Veuillez sélectionner un fichier CSV');
-                return;
-            }
-
-            await this.loadSelectedCSV(selectedOption);
-            const downloadUrl = selectedOption.dataset.downloadUrl;
-            if (downloadUrl) {
-                await this.app.loadCSVFromURL(downloadUrl, selectedCSV);
-                return;
-            }
-
-            if (!this.app.crud.loadFlashcards(selectedCSV)) {
-                this.app.setCurrentCSV(selectedCSV);
-                this.app.flashcards = [];
-                this.app.saveFlashcards();
-            }
-        });
-
         this.imageFieldControllers.question = this.setupImageField('question');
         this.imageFieldControllers.answer = this.setupImageField('answer');
 

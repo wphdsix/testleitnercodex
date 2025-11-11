@@ -48,6 +48,13 @@ export class LeitnerApp {
         this.currentQuestionImageData = null;
         this.currentAnswerImageData = null;
 
+        this.pendingCSVBootstrap = null;
+        this.handleExternalCSVUpdate = this.handleExternalCSVUpdate.bind(this);
+
+        if (typeof window !== 'undefined' && window.addEventListener) {
+            window.addEventListener('leitner:csv-list-updated', this.handleExternalCSVUpdate);
+        }
+
         this.handleBoxSelection = this.handleBoxSelection.bind(this);
 
         this.init();
@@ -61,6 +68,12 @@ export class LeitnerApp {
         this.ui.init(this);
         this.crud.init(this);
         this.ui.applyUserConfig(this.userConfig);
+
+        if (this.pendingCSVBootstrap) {
+            const { files, detail } = this.pendingCSVBootstrap;
+            this.pendingCSVBootstrap = null;
+            this.applyExternalCSVList(files, detail);
+        }
 
         this.bootstrapFromCache();
         await this.loadCSVFromGitHub();
@@ -370,6 +383,70 @@ export class LeitnerApp {
         }
 
         return true;
+    }
+
+    applyExternalCSVList(files, detail = {}) {
+        if (!Array.isArray(files)) {
+            return;
+        }
+
+        const resolvedFiles = files
+            .map((file) => {
+                const name = file?.name || file?.publicPath || '';
+                if (!name) {
+                    return null;
+                }
+
+                const publicPath = file?.publicPath || '';
+                const source = file?.source || detail?.source || '';
+                const downloadUrl = file?.download_url
+                    || this.resolveFallbackDownloadUrl(publicPath || name);
+
+                return {
+                    ...file,
+                    name,
+                    publicPath,
+                    source,
+                    download_url: downloadUrl
+                };
+            })
+            .filter(Boolean);
+
+        const names = resolvedFiles.map(file => file.name);
+        this.github.csvFiles = resolvedFiles;
+        this.storage.setJSON('leitnerCSVList', names);
+
+        if (!this.ui || typeof this.ui.populateCSVSelector !== 'function') {
+            this.pendingCSVBootstrap = { files: resolvedFiles, detail };
+            return;
+        }
+
+        if (!resolvedFiles.length) {
+            this.ui.populateCSVSelector([]);
+            return;
+        }
+
+        const desiredSelection = detail?.selectedName && names.includes(detail.selectedName)
+            ? detail.selectedName
+            : (names.includes(this.currentCSV) ? this.currentCSV : names[0]);
+
+        this.ui.populateCSVSelector(resolvedFiles, { selectedName: desiredSelection });
+    }
+
+    handleExternalCSVUpdate(event) {
+        const detail = event?.detail;
+        const files = detail?.files;
+
+        if (!Array.isArray(files)) {
+            return;
+        }
+
+        if (!this.ui || this.ui.app !== this) {
+            this.pendingCSVBootstrap = { files, detail };
+            return;
+        }
+
+        this.applyExternalCSVList(files, detail);
     }
 
     async loadCSVFromGitHub() {
