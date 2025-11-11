@@ -254,7 +254,6 @@
       select.innerHTML = '<option value="">Erreur de chargement</option>';
       return;
     } finally {
-      const bootstrap = window.__leitnerCSVBootstrap || {};
       const hasFiles = Array.isArray(bootstrap.files) && bootstrap.files.length > 0;
       select.disabled = !hasFiles;
     }
@@ -290,7 +289,6 @@
         select.dispatchEvent(new Event('change', { bubbles: true }));
       }
 
-      const bootstrap = window.__leitnerCSVBootstrap || {};
       const hasFiles = Array.isArray(bootstrap.files) && bootstrap.files.length > 0;
       select.disabled = !hasFiles;
     } catch (error) {
