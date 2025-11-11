@@ -89,14 +89,21 @@ export class GitHubManager {
                 const resolvedBranch = branch || this.config.repoBranch || 'main';
                 this.csvFiles = contents
                     .filter(item => item.type === 'file' && item.name && item.name.toLowerCase().endsWith('.csv'))
-                    .map(item => ({
-                        ...item,
-                        download_url: item.download_url
-                            || `https://raw.githubusercontent.com/${this.config.repoOwner}/${this.config.repoName}/${resolvedBranch}/${(item.path || item.name)
-                                .split('/')
-                                .map(segment => encodeURIComponent(segment))
-                                .join('/')}`
-                    }));
+                    .map(item => {
+                        const rawPath = item.path || item.name || '';
+                        const encodedPath = rawPath
+                            .split('/')
+                            .map(segment => encodeURIComponent(segment))
+                            .join('/');
+                        const publicPath = rawPath.replace(/^docs\//i, '');
+
+                        return {
+                            ...item,
+                            publicPath,
+                            download_url: item.download_url
+                                || `https://raw.githubusercontent.com/${this.config.repoOwner}/${this.config.repoName}/${resolvedBranch}/${encodedPath}`
+                        };
+                    });
 
                 this.localBaseUrl = null;
 
@@ -146,7 +153,8 @@ export class GitHubManager {
 
             return {
                 name: filename,
-                download_url: url.href
+                download_url: url.href,
+                publicPath: url.pathname.replace(/^\//, '')
             };
         } catch (error) {
             console.warn('Échec de la normalisation du chemin CSV local', rawPath, error);

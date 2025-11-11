@@ -468,7 +468,7 @@ export class UIManager {
         const selector = document.getElementById('csv-selector');
 
         // Garder l'option par défaut
-        selector.innerHTML = '<option value="default">Sélectionner un fichier CSV</option>';
+        selector.innerHTML = '<option value="default" data-role="placeholder">Sélectionner un fichier CSV</option>';
 
         // Ajouter les fichiers CSV du dépôt GitHub
         csvFiles.forEach((file, index) => {
@@ -477,6 +477,12 @@ export class UIManager {
             option.textContent = file.name;
             if (file.download_url) {
                 option.dataset.downloadUrl = file.download_url;
+            }
+            if (file.publicPath) {
+                option.dataset.publicPath = file.publicPath;
+            }
+            if (file.source) {
+                option.dataset.source = file.source;
             }
 
             if (selectedName) {

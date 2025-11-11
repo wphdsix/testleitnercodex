@@ -11,56 +11,182 @@
     <!-- <link rel="icon" href="favicon.ico" type="image/x-icon"> -->
 </head>
 <script>
-  async function loadCsvFiles() {
-    const select = document.getElementById('csv-selector');
-    if (!select) {
-      return;
-    }
-
+  async function fetchCsvFilesFromGitHub() {
     const owner = 'leitexper1';
     const repo = 'testleitnercodex';
     const branch = 'main';
     const folderPath = 'docs';
     const folderPrefix = folderPath.endsWith('/') ? folderPath : `${folderPath}/`;
 
+    const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+    const response = await fetch(treeUrl);
+
+    if (!response.ok) {
+      throw new Error(`Erreur API GitHub : ${response.status}`);
+    }
+
+    const payload = await response.json();
+    if (!payload?.tree) {
+      throw new Error('Réponse inattendue de l’API GitHub.');
+    }
+
+    return payload.tree
+      .filter(item => item.type === 'blob' && item.path.startsWith(folderPrefix) && item.path.endsWith('.csv'))
+      .map(item => {
+        const relativePath = item.path.substring(folderPrefix.length);
+        const publicPath = item.path.startsWith('docs/') ? item.path.substring(5) : item.path;
+        const encodedPath = item.path
+          .split('/')
+          .map(segment => encodeURIComponent(segment))
+          .join('/');
+        const downloadUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodedPath}`;
+
+        return {
+          name: relativePath,
+          publicPath,
+          download_url: downloadUrl,
+          source: 'github'
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  }
+
+  async function fetchCsvFilesFromManifest() {
+    const manifestCandidates = ['csv-files.json', 'csv_manifest.json', '__csv_manifest.json'];
+
+    for (const manifestName of manifestCandidates) {
+      try {
+        const response = await fetch(manifestName, { cache: 'no-store' });
+        if (!response.ok) {
+          continue;
+        }
+
+        const payload = await response.json();
+        const entries = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.files)
+            ? payload.files
+            : [];
+
+        const files = entries
+          .map(entry => {
+            if (typeof entry === 'string') {
+              return { name: entry, publicPath: entry };
+            }
+
+            const name = entry?.name || entry?.path || '';
+            const publicPath = entry?.publicPath || entry?.path || entry?.name || '';
+
+            return name && publicPath ? { name, publicPath } : null;
+          })
+          .filter(Boolean)
+          .map(file => {
+            let downloadUrl = '';
+            try {
+              downloadUrl = new URL(file.publicPath, window.location.href).href;
+            } catch (error) {
+              console.warn('Impossible de résoudre le chemin CSV local', file.publicPath, error);
+            }
+
+            return {
+              ...file,
+              download_url: downloadUrl,
+              source: 'manifest'
+            };
+          })
+          .filter(file => !!file.download_url)
+          .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+
+        if (files.length > 0) {
+          return files;
+        }
+      } catch (error) {
+        console.warn(`Lecture du manifeste CSV local échouée (${manifestName})`, error);
+      }
+    }
+
+    return [];
+  }
+
+  function populateCsvSelect(select, csvFiles) {
+    select.innerHTML = '';
+
+    if (!csvFiles.length) {
+      const emptyOption = document.createElement('option');
+      emptyOption.value = 'default';
+      emptyOption.dataset.role = 'placeholder';
+      emptyOption.textContent = 'Aucun fichier .csv trouvé';
+      select.appendChild(emptyOption);
+      select.value = 'default';
+      return;
+    }
+
+    const placeholder = document.createElement('option');
+    placeholder.value = 'default';
+    placeholder.dataset.role = 'placeholder';
+    placeholder.textContent = 'Sélectionner un fichier CSV';
+    select.appendChild(placeholder);
+
+    csvFiles.forEach((file, index) => {
+      const option = document.createElement('option');
+      const name = file.name || file.publicPath || `csv-${index + 1}`;
+      option.value = name;
+      option.textContent = name;
+
+      if (file.download_url) {
+        option.dataset.downloadUrl = file.download_url;
+      }
+
+      if (file.publicPath) {
+        option.dataset.publicPath = file.publicPath;
+      }
+
+      option.dataset.source = file.source || '';
+      select.appendChild(option);
+    });
+
+    const defaultSelection = csvFiles[0]?.name;
+    if (defaultSelection) {
+      select.value = defaultSelection;
+    }
+  }
+
+  async function loadCsvFiles() {
+    const select = document.getElementById('csv-selector');
+    if (!select) {
+      return;
+    }
+
     select.disabled = true;
     select.innerHTML = '<option value="">Recherche des fichiers…</option>';
 
     try {
-      const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
-      const response = await fetch(treeUrl);
+      let csvFiles = [];
+      let source = 'github';
 
-      if (!response.ok) {
-        throw new Error(`Erreur API GitHub : ${response.status}`);
+      try {
+        csvFiles = await fetchCsvFilesFromGitHub();
+      } catch (error) {
+        console.warn('Chargement via GitHub impossible, tentative avec le manifeste local.', error);
+        source = 'manifest';
       }
 
-      const payload = await response.json();
-      if (!payload?.tree) {
-        throw new Error('Réponse inattendue de l’API GitHub.');
+      if (!csvFiles.length) {
+        csvFiles = await fetchCsvFilesFromManifest();
+        source = 'manifest';
       }
 
-      const csvFiles = payload.tree
-        .filter(item => item.type === 'blob' && item.path.startsWith(folderPrefix) && item.path.endsWith('.csv'))
-        .map(item => ({
-          name: item.path.substring(folderPrefix.length),
-          path: item.path
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+      populateCsvSelect(select, csvFiles);
 
-      select.innerHTML = '';
-
-      if (csvFiles.length === 0) {
-        select.innerHTML = '<option value="">Aucun fichier .csv trouvé</option>';
-        return;
+      if (Array.isArray(csvFiles) && csvFiles.length > 0) {
+        select.dataset.bootstrapSource = source;
+        window.__leitnerCSVBootstrap = {
+          files: csvFiles.map(file => ({ ...file })),
+          source,
+          selectedName: select.value !== 'default' ? select.value : null,
+          timestamp: Date.now()
+        };
       }
-
-      csvFiles.forEach(file => {
-        const option = document.createElement('option');
-        const publicPath = file.path.startsWith('docs/') ? file.path.substring(5) : file.path;
-        option.value = publicPath;
-        option.textContent = file.name;
-        select.appendChild(option);
-      });
     } catch (err) {
       console.error('Impossible de charger les fichiers CSV :', err);
       select.innerHTML = '<option value="">Erreur de chargement</option>';
@@ -75,8 +201,12 @@
 
   function openImportExport() {
     const select = document.getElementById('csv-selector');
-    const selectedFile = select?.value;
-    if (!selectedFile) {
+    const selectedOption = select?.selectedOptions?.[0];
+    const selectedFile = selectedOption?.dataset?.downloadUrl
+      || selectedOption?.dataset?.publicPath
+      || selectedOption?.value;
+
+    if (!selectedFile || selectedFile === 'default') {
       alert('Veuillez sélectionner un fichier CSV.');
       return;
     }
