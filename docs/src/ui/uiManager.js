@@ -643,12 +643,22 @@ export class UIManager {
         const container = document.getElementById('flashcard-container');
         container.classList.remove('hidden');
         container.setAttribute('aria-hidden', 'false');
+
+        if (typeof this.app?.persistSessionSnapshot === 'function') {
+            this.app.persistSessionSnapshot();
+        }
     }
 
     hideCardViewer() {
         const container = document.getElementById('flashcard-container');
         container.classList.add('hidden');
         container.setAttribute('aria-hidden', 'true');
+        if (this.app) {
+            this.app.currentCard = null;
+            if (typeof this.app.persistSessionSnapshot === 'function') {
+                this.app.persistSessionSnapshot();
+            }
+        }
     }
 
     // Dans ui.js, modifiez la méthode showCardEditor

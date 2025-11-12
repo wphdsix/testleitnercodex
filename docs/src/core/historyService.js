@@ -10,6 +10,25 @@ export class HistoryService {
         return this.storage.getJSON(HISTORY_STORAGE_KEY, []);
     }
 
+    restoreSession() {
+        if (this.currentSession) {
+            return this.currentSession;
+        }
+
+        const sessions = this.getSessions();
+        for (let index = sessions.length - 1; index >= 0; index -= 1) {
+            const candidate = sessions[index];
+            if (candidate && !candidate.completedAt) {
+                this.currentSession = candidate;
+                this.#emit('leitner:session-restored', candidate);
+                this.#emit('leitner:session-started', candidate);
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
     startSession(context = {}) {
         if (this.currentSession) {
             return this.currentSession;

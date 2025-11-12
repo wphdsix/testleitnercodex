@@ -4,6 +4,7 @@ import { KeyboardManager } from './ui/keyboardManager.js';
 import { TabbedNavigation } from './ui/components/tabbedNavigation.js';
 import { StatisticsDashboard } from './ui/components/statisticsDashboard.js';
 import { CSVInlineEditor } from './ui/components/csvInlineEditor.js';
+import { SessionModal } from './ui/components/sessionModal.js';
 
 /**
  * Bootstrap file responsible for wiring UI navigation and the Leitner app.
@@ -70,6 +71,12 @@ function bootstrap() {
         });
         dashboard.init();
     }
+
+    const sessionModal = new SessionModal({
+        app,
+        historyService: app.history
+    });
+    sessionModal.init();
 }
 
 document.addEventListener('DOMContentLoaded', bootstrap);

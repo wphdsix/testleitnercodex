@@ -642,6 +642,9 @@
                 <div class="bg-white rounded-lg shadow-md p-6">
                     <h2 class="text-2xl font-bold mb-4">Tableau de bord des statistiques</h2>
                     <p class="text-gray-600 mb-6">Analysez vos sessions de révision, suivez votre progression et identifiez vos tendances d'apprentissage.</p>
+                    <button type="button" class="stats-modal__trigger mb-6" data-open-stats>
+                        📊 Statistiques
+                    </button>
                     <div data-component="statistics-dashboard" class="statistics-dashboard__container"></div>
                 </div>
             </section>
@@ -758,6 +761,29 @@
                         <p>Besoin d'un rappel rapide&nbsp;? Revenez à tout moment sur ce guide en cliquant sur <strong>📘 Explication du processus</strong> dans la section de configuration.</p>
                     </footer>
                 </div>
+            </div>
+        </div>
+
+        <!-- Modale Statistiques -->
+        <div id="statsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="stats-modal-title" aria-hidden="true">
+            <div class="modal-content" role="document">
+                <button type="button" class="close" data-action="close-stats" aria-label="Fermer la fenêtre Statistiques">&times;</button>
+                <h2 id="stats-modal-title" class="text-2xl font-bold mb-4">📊 Statistiques</h2>
+
+                <section id="currentSession" class="stats-modal__section stats-modal__current hidden" aria-live="polite">
+                    <h3 class="text-lg font-semibold mb-2">🟢 Session en cours</h3>
+                    <p id="sessionInfo" class="text-sm text-gray-700"></p>
+                    <button type="button" class="stats-modal__resume" data-action="resume-session">
+                        ▶️ Reprendre
+                    </button>
+                </section>
+
+                <section class="stats-modal__section">
+                    <h3 class="text-lg font-semibold">Historique</h3>
+                    <ul id="historyList" class="stats-history">
+                        <li class="stats-history__item">Aucune session terminée</li>
+                    </ul>
+                </section>
             </div>
         </div>
 
