@@ -7,6 +7,7 @@ import { StorageService } from '../data/storageService.js';
 
 const USER_CONFIG_KEY = 'leitnerUserConfig';
 const LAST_CSV_KEY = 'leitnerLastCSV';
+const CURRENT_SESSION_STATE_KEY = 'leitnerCurrentSessionState';
 const DEFAULT_USER_CONFIG = {
     curves: {
         standard: [...LeitnerEngine.DEFAULT_CURVE]
@@ -28,6 +29,12 @@ export class LeitnerApp {
 
         this.storage = new StorageService();
         this.history = new HistoryService(this.storage);
+
+        this.sessionStateKey = CURRENT_SESSION_STATE_KEY;
+        this.cachedSessionState = this.storage.getJSON(this.sessionStateKey, null);
+        this.handleSessionRecorded = this.handleSessionRecorded.bind(this);
+        this.handleSessionStarted = this.handleSessionStarted.bind(this);
+        this.persistSessionSnapshot = this.persistSessionSnapshot.bind(this);
 
         this.keyboardManager = options.keyboardManager || null;
 
@@ -65,6 +72,11 @@ export class LeitnerApp {
         this.userConfig = this.loadUserConfig();
         this.reviewIntervals = [...this.getActiveCurve()];
 
+        if (typeof window !== 'undefined') {
+            window.addEventListener('leitner:session-recorded', this.handleSessionRecorded, { passive: true });
+            window.addEventListener('leitner:session-started', this.handleSessionStarted, { passive: true });
+        }
+
         this.ui.init(this);
         this.crud.init(this);
         this.ui.applyUserConfig(this.userConfig);
@@ -77,11 +89,17 @@ export class LeitnerApp {
 
         this.bootstrapFromCache();
         await this.loadCSVFromGitHub();
+        const restoredSession = this.history.restoreSession();
+
         this.refreshBoxes();
         this.bindEvents();
         this.setupGitHubGuidePlaceholders();
 
-        this.history.startSession({ mode: 'review' });
+        if (!restoredSession) {
+            this.history.startSession({ mode: 'review' });
+        }
+
+        this.handleSessionStarted();
 
         if (typeof window !== 'undefined') {
             window.addEventListener('beforeunload', () => {
@@ -289,6 +307,134 @@ export class LeitnerApp {
         this.setCurrentCSV(selectedName);
         this.flashcards = [];
         this.refreshBoxes();
+    }
+
+    getStoredSessionState() {
+        return this.cachedSessionState;
+    }
+
+    getCurrentSessionSnapshot(now = Date.now()) {
+        const session = this.history?.currentSession || null;
+        if (!session || session.completedAt) {
+            return null;
+        }
+
+        const cardsSeen = Array.isArray(session.events)
+            ? session.events
+                .map(event => event?.cardId)
+                .filter(Boolean)
+            : [];
+
+        const seenSet = new Set(cardsSeen);
+        const dueCards = this.flashcards
+            .filter(card => this.getCardNextReview(card, now) <= now)
+            .map(card => card.id);
+
+        return {
+            id: session.id,
+            csv: this.currentCSV,
+            startedAt: session.startedAt,
+            stats: { ...session.stats },
+            cardsSeen: Array.from(seenSet),
+            dueCardIds: dueCards,
+            totalDue: dueCards.length,
+            totalCards: this.flashcards.length,
+            lastCardId: this.currentCard?.id ?? null,
+            updatedAt: now
+        };
+    }
+
+    persistSessionSnapshot() {
+        const snapshot = this.getCurrentSessionSnapshot();
+        if (!snapshot) {
+            this.clearSessionSnapshot();
+            return;
+        }
+
+        this.cachedSessionState = snapshot;
+        this.storage.setJSON(this.sessionStateKey, snapshot);
+    }
+
+    clearSessionSnapshot() {
+        this.cachedSessionState = null;
+        this.storage.removeItem(this.sessionStateKey);
+    }
+
+    handleSessionRecorded() {
+        this.clearSessionSnapshot();
+    }
+
+    handleSessionStarted() {
+        if (!this.history?.currentSession || this.history.currentSession.completedAt) {
+            return;
+        }
+        this.persistSessionSnapshot();
+    }
+
+    async resumeSession() {
+        const snapshot = this.getStoredSessionState();
+        if (!snapshot) {
+            return false;
+        }
+
+        if (snapshot.csv && snapshot.csv !== this.currentCSV) {
+            const selector = document.getElementById('csv-selector');
+            const option = selector
+                ? Array.from(selector.options).find(item => item.value === snapshot.csv)
+                : null;
+
+            if (!option) {
+                console.warn('Impossible de retrouver le fichier CSV pour la session', snapshot.csv);
+                return false;
+            }
+
+            selector.value = snapshot.csv;
+            const loaded = await this.ui.loadSelectedCSV(option);
+            if (!loaded) {
+                return false;
+            }
+        }
+
+        if (this.tabRouter?.isValidTab?.('review')) {
+            this.tabRouter.activateTab('review');
+        }
+
+        this.refreshBoxes();
+
+        const candidates = [];
+        if (snapshot.lastCardId) {
+            const lastCard = this.flashcards.find(card => card.id === snapshot.lastCardId);
+            if (lastCard) {
+                candidates.push(lastCard);
+            }
+        }
+
+        if (Array.isArray(snapshot.dueCardIds)) {
+            snapshot.dueCardIds.forEach((id) => {
+                const card = this.flashcards.find(item => item.id === id);
+                if (card && !candidates.includes(card)) {
+                    candidates.push(card);
+                }
+            });
+        }
+
+        if (this.nextReviewCard) {
+            candidates.push(this.nextReviewCard);
+        }
+
+        const fallback = this.getNextCardForReview();
+        if (fallback) {
+            candidates.push(fallback);
+        }
+
+        const targetCard = candidates.find(Boolean) || null;
+        if (targetCard) {
+            this.ui.showCardViewer(targetCard);
+            this.currentCard = targetCard;
+            this.persistSessionSnapshot();
+        }
+
+        return true;
     }
 
     resolveFallbackDownloadUrl(rawPath = '') {
@@ -556,6 +702,7 @@ export class LeitnerApp {
         });
 
         this.emit('leitner:next-card', { card: nextCard, csv: this.currentCSV });
+        this.persistSessionSnapshot();
     }
 
     updateBoxes() {
@@ -651,6 +798,8 @@ export class LeitnerApp {
             nextReview: normalizedCard.nextReview
         });
 
+        this.persistSessionSnapshot();
+
         if (!document.getElementById('cards-list-container').classList.contains('hidden')) {
             this.ui.showCardsList(this.currentBoxNumber, this.getCardsForBox(this.currentBoxNumber));
         }
@@ -672,6 +821,7 @@ export class LeitnerApp {
     resetAllData() {
         if (confirm('Êtes-vous sûr de vouloir réinitialiser toutes les données? Cette action est irréversible.')) {
             this.storage.clear();
+            this.clearSessionSnapshot();
             this.flashcards = [];
             this.setCurrentCSV('default');
             this.userConfig = this.loadUserConfig();
