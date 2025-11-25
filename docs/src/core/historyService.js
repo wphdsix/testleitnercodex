@@ -112,6 +112,12 @@ export class HistoryService {
         return session;
     }
 
+    clearSessions() {
+        this.storage.removeItem(HISTORY_STORAGE_KEY);
+        this.currentSession = null;
+        this.#emit('leitner:sessions-cleared');
+    }
+
     #persistSession(session) {
         const sessions = this.getSessions();
         const index = sessions.findIndex(item => item.id === session.id);
