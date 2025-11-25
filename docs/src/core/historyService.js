@@ -53,6 +53,26 @@ export class HistoryService {
         return session;
     }
 
+    recordInteraction(type, context = {}) {
+        const timestamp = Date.now();
+        const session = {
+            id: `interaction_${timestamp}`,
+            startedAt: timestamp,
+            completedAt: timestamp,
+            context: { ...context, type },
+            stats: {
+                reviewed: 0,
+                correct: 0,
+                incorrect: 0
+            },
+            events: []
+        };
+
+        this.#persistSession(session);
+        this.#emit('leitner:session-recorded', session);
+        return session;
+    }
+
     recordReview(event) {
         if (!this.currentSession) {
             this.startSession({ reason: 'implicit' });

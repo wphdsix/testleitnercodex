@@ -124,7 +124,7 @@ export class StatisticsService {
         const perSession = sessions.map((session, index) => {
             const durationMs = this.getSessionDuration(session);
             return {
-                label: `Session ${index + 1}`,
+                label: this.getSessionLabel(session, index),
                 duration: this.formatDuration(durationMs),
                 durationMinutes: Math.round((durationMs / 60000) * 100) / 100,
                 durationMs
@@ -155,9 +155,7 @@ export class StatisticsService {
             const accuracy = reviewed === 0 ? 0 : Math.round((correct / reviewed) * 100);
             const started = session.startedAt ? new Date(session.startedAt) : null;
             const timestamp = session.startedAt || session.completedAt || this.now();
-            const context = Object.entries(session.context || {})
-                .map(([key, value]) => `${key}: ${value}`)
-                .join(', ');
+            const context = this.describeContext(session.context);
 
             return {
                 id: session.id,
@@ -203,5 +201,36 @@ export class StatisticsService {
             return `${minutes}m ${seconds}s`;
         }
         return `${seconds}s`;
+    }
+
+    getSessionLabel(session, index = 0) {
+        const contextLabel = this.describeContext(session.context);
+        if (contextLabel) {
+            return contextLabel;
+        }
+        return `Session ${index + 1}`;
+    }
+
+    describeContext(rawContext = {}) {
+        if (!rawContext || typeof rawContext !== 'object') {
+            return '';
+        }
+
+        const context = rawContext || {};
+        if (context.type === 'csv-changed') {
+            const from = context.from || 'inconnu';
+            const to = context.to || 'inconnu';
+            return `Changement de CSV (${from} → ${to})`;
+        }
+
+        if (context.mode) {
+            return `Mode ${context.mode}`;
+        }
+
+        const entries = Object.entries(context)
+            .filter(([key]) => key !== 'type')
+            .map(([key, value]) => `${key}: ${value}`);
+
+        return entries.join(', ');
     }
 }
