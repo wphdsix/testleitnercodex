@@ -69,6 +69,7 @@ export class UIManager {
             this.app.setCurrentCSV('default');
             this.app.flashcards = [];
             this.app.refreshBoxes();
+            this.clearCardsDisplay();
             this.updateCSVStatus('');
             return false;
         }
@@ -77,6 +78,7 @@ export class UIManager {
         if (isSwitchingDeck) {
             this.app.persistCurrentProgress();
             this.app.resetBoxOneForCSV(csvName);
+            this.clearCardsDisplay();
         }
 
         if (csvName === this.app.currentCSV && this.app.flashcards.length > 0) {
@@ -115,6 +117,20 @@ export class UIManager {
             alert(`Erreur de chargement du fichier "${csvName}": ${error.message}`);
             return false;
         }
+    }
+
+    clearCardsDisplay() {
+        const cardsList = document.getElementById('cards-list');
+        if (cardsList) {
+            cardsList.innerHTML = '';
+        }
+
+        const cardsContainer = document.getElementById('cards-list-container');
+        if (cardsContainer) {
+            cardsContainer.classList.add('hidden');
+        }
+
+        this.hideCardViewer();
     }
 
     readFileAsDataURL(file) {
