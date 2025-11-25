@@ -12,16 +12,23 @@ export class StatisticsDashboard {
      * @param {HTMLElement} options.container - Root DOM element for the dashboard.
      * @param {import('../../core/historyService.js').HistoryService} options.historyService - Source history service.
      * @param {import('../keyboardManager.js').KeyboardManager} [options.keyboardManager] - Optional shortcut manager.
+     * @param {import('../../core/leitnerApp.js').LeitnerApp} [options.app] - Optional application instance for session controls.
      */
-    constructor({ container, historyService, keyboardManager } = {}) {
+    constructor({ container, historyService, keyboardManager, app } = {}) {
         this.container = container;
         this.historyService = historyService;
         this.keyboardManager = keyboardManager || null;
+        this.app = app || null;
         this.service = new StatisticsService({ historyService });
         this.table = null;
+        this.currentSessionContainer = null;
+        this.resumeButton = null;
+        this.clearButton = null;
 
         this.refresh = this.refresh.bind(this);
         this.debouncedRefresh = this.debounce(this.refresh, 400);
+        this.resumeActiveSession = this.resumeActiveSession.bind(this);
+        this.clearSessionFiles = this.clearSessionFiles.bind(this);
     }
 
     /**
@@ -55,6 +62,8 @@ export class StatisticsDashboard {
 
         window.addEventListener('leitner:card-reviewed', this.debouncedRefresh);
         window.addEventListener('leitner:session-recorded', this.refresh);
+        window.addEventListener('leitner:session-started', this.refresh);
+        window.addEventListener('leitner:sessions-cleared', this.refresh);
     }
 
     /**
@@ -65,6 +74,17 @@ export class StatisticsDashboard {
     renderSkeleton() {
         this.container.classList.add('statistics-dashboard');
         this.container.innerHTML = `
+            <section class="statistics-dashboard__panel" aria-label="Session en cours">
+                <header class="statistics-dashboard__panel-header">
+                    <h3 class="statistics-dashboard__panel-title">Session en cours</h3>
+                    <span class="statistics-dashboard__panel-caption">Reprendre ou nettoyer l'historique</span>
+                </header>
+                <div class="statistics-dashboard__current" data-current-session></div>
+                <div class="statistics-dashboard__actions">
+                    <button type="button" class="btn" data-action="resume-session">Reprendre la session</button>
+                    <button type="button" class="btn btn--danger" data-action="clear-sessions">Effacer les sessions</button>
+                </div>
+            </section>
             <div class="statistics-dashboard__summary" role="list"></div>
             <div class="statistics-dashboard__grid">
                 <section class="statistics-dashboard__panel" aria-label="Carte de chaleur des sessions">
@@ -90,6 +110,13 @@ export class StatisticsDashboard {
                 <div data-dashboard-table></div>
             </section>
         `;
+
+        this.currentSessionContainer = this.container.querySelector('[data-current-session]');
+        this.resumeButton = this.container.querySelector('[data-action="resume-session"]');
+        this.clearButton = this.container.querySelector('[data-action="clear-sessions"]');
+
+        this.resumeButton?.addEventListener('click', this.resumeActiveSession);
+        this.clearButton?.addEventListener('click', this.clearSessionFiles);
     }
 
     /**
@@ -98,11 +125,95 @@ export class StatisticsDashboard {
      * @returns {void}
      */
     refresh() {
+        this.renderCurrentSession();
         const data = this.service.getDashboardData();
         this.renderSummary(data.overview);
         this.renderHeatmap(data.heatmap);
         this.renderDurations(data.durations);
         this.table?.setData(data.sessions);
+    }
+
+    renderCurrentSession() {
+        if (!this.currentSessionContainer) {
+            return;
+        }
+
+        const session = this.historyService?.currentSession || null;
+        const snapshot = this.app?.getStoredSessionState?.() || null;
+        const hasActiveSession = Boolean(session && !session.completedAt);
+
+        if (!hasActiveSession) {
+            this.currentSessionContainer.textContent = 'Aucune session en cours. Commence une nouvelle révision pour générer des statistiques.';
+            if (this.resumeButton) {
+                this.resumeButton.disabled = true;
+            }
+            return;
+        }
+
+        const reviewed = session?.stats?.reviewed ?? snapshot?.cardsSeen?.length ?? 0;
+        const remaining = typeof snapshot?.totalDue === 'number'
+            ? `${snapshot.totalDue} carte(s) restantes`
+            : 'Progression en cours';
+        const startedAt = session.startedAt ? new Date(session.startedAt) : null;
+        const contextLabel = this.service.describeContext(session.context) || 'Session de révision';
+
+        this.currentSessionContainer.innerHTML = `
+            <p><strong>${contextLabel}</strong></p>
+            <p>${reviewed} carte(s) vues • ${remaining}</p>
+            <p>Commencée ${startedAt ? startedAt.toLocaleString('fr-FR') : 'à une date inconnue'}</p>
+        `;
+
+        if (this.resumeButton) {
+            const hasSnapshot = Boolean(snapshot);
+            this.resumeButton.disabled = !(this.app?.resumeSession && hasSnapshot);
+        }
+    }
+
+    async resumeActiveSession() {
+        if (!this.app?.resumeSession) {
+            alert('Impossible de reprendre : application non disponible.');
+            return;
+        }
+
+        const snapshot = this.app?.getStoredSessionState?.();
+        if (!this.historyService?.currentSession || this.historyService.currentSession.completedAt || !snapshot) {
+            alert('Aucune session à reprendre.');
+            return;
+        }
+
+        if (this.resumeButton) {
+            this.resumeButton.disabled = true;
+        }
+
+        try {
+            const resumed = await this.app.resumeSession();
+            if (!resumed) {
+                alert('Reprise impossible. Vérifie que le fichier CSV est toujours disponible.');
+            }
+        } catch (error) {
+            console.error('StatisticsDashboard: resume failed', error);
+            alert('Une erreur est survenue pendant la reprise de session.');
+        } finally {
+            if (this.resumeButton) {
+                this.resumeButton.disabled = false;
+            }
+        }
+    }
+
+    clearSessionFiles() {
+        if (!this.historyService?.clearSessions) {
+            alert('Impossible d’effacer les sessions : service indisponible.');
+            return;
+        }
+
+        const confirmed = window.confirm('Supprimer toutes les sessions enregistrées ? Cette action est définitive.');
+        if (!confirmed) {
+            return;
+        }
+
+        this.historyService.clearSessions();
+        this.app?.clearSessionSnapshot?.();
+        this.refresh();
     }
 
     /**

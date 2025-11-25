@@ -67,7 +67,8 @@ function bootstrap() {
         const dashboard = new StatisticsDashboard({
             container: statsContainer,
             historyService: app.history,
-            keyboardManager
+            keyboardManager,
+            app
         });
         dashboard.init();
     }
