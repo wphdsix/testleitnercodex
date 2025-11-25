@@ -73,6 +73,12 @@ export class UIManager {
             return false;
         }
 
+        const isSwitchingDeck = csvName !== this.app.currentCSV;
+        if (isSwitchingDeck) {
+            this.app.persistCurrentProgress();
+            this.app.resetBoxOneForCSV(csvName);
+        }
+
         if (csvName === this.app.currentCSV && this.app.flashcards.length > 0) {
             this.updateCSVStatus('');
             return true;

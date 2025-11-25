@@ -277,6 +277,68 @@ export class LeitnerApp {
         }
     }
 
+    persistCurrentProgress() {
+        try {
+            this.saveFlashcards();
+        } catch (error) {
+            console.warn('Impossible de sauvegarder les progrès avant le changement de deck', error);
+        }
+
+        try {
+            this.persistSessionSnapshot();
+        } catch (error) {
+            console.warn('Impossible de figer l\'état de session courant', error);
+        }
+    }
+
+    resetBoxOneForCSV(csvName) {
+        if (!csvName || typeof csvName !== 'string' || csvName === 'default') {
+            return;
+        }
+
+        const boxKey = `leitner_box1_${csvName}`;
+        const statsKey = `leitner_stats_${csvName}`;
+        const reviewKey = `leitner_reviewing_${csvName}`;
+
+        this.storage.removeItem(boxKey);
+        this.storage.removeItem(reviewKey);
+
+        const existingStats = this.storage.getJSON(statsKey, {});
+        const updatedStats = {
+            ...existingStats,
+            box1Count: 0,
+            box1Cards: []
+        };
+
+        if (updatedStats.boxes && typeof updatedStats.boxes === 'object') {
+            updatedStats.boxes['1'] = [];
+        }
+
+        this.storage.setJSON(statsKey, updatedStats);
+
+        const savedFlashcards = this.storage.getJSON(`leitnerFlashcards_${csvName}`, null);
+        if (Array.isArray(savedFlashcards)) {
+            const now = Date.now();
+            const normalized = savedFlashcards.map(card => {
+                if (Number(card.box) === 1) {
+                    return this.normaliseCard({
+                        ...card,
+                        box: 1,
+                        lastReview: now,
+                        nextReview: now
+                    }, now);
+                }
+                return this.normaliseCard(card, now);
+            });
+
+            this.storage.setJSON(`leitnerFlashcards_${csvName}`, normalized);
+        }
+
+        if (this.cachedSessionState?.csv === csvName) {
+            this.clearSessionSnapshot();
+        }
+    }
+
     getPreferredCSVName(defaultName = null) {
         const stored = this.storage.getItem(LAST_CSV_KEY);
         if (stored && typeof stored === 'string') {
