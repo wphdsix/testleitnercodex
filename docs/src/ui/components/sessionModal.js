@@ -284,6 +284,13 @@ export class SessionModal {
             const meta = document.createElement('div');
             meta.className = 'stats-history__meta';
 
+            const contextLabel = this.describeContext(session.context);
+            if (contextLabel) {
+                const contextSpan = document.createElement('span');
+                contextSpan.textContent = contextLabel;
+                meta.appendChild(contextSpan);
+            }
+
             const reviewed = session.stats?.reviewed ?? 0;
             const correct = session.stats?.correct ?? 0;
             const accuracy = reviewed > 0 ? Math.round((correct / reviewed) * 100) : 0;
@@ -377,5 +384,28 @@ export class SessionModal {
         if (window.confirm('Tu as une session en cours. La reprendre ?')) {
             void this.resume();
         }
+    }
+
+    describeContext(rawContext = {}) {
+        if (!rawContext || typeof rawContext !== 'object') {
+            return '';
+        }
+
+        const context = rawContext || {};
+        if (context.type === 'csv-changed') {
+            const from = context.from || 'inconnu';
+            const to = context.to || 'inconnu';
+            return `Changement de CSV (${from} → ${to})`;
+        }
+
+        if (context.mode) {
+            return `Mode ${context.mode}`;
+        }
+
+        const entries = Object.entries(context)
+            .filter(([key]) => key !== 'type')
+            .map(([key, value]) => `${key}: ${value}`);
+
+        return entries.join(', ');
     }
 }

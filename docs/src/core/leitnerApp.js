@@ -268,7 +268,15 @@ export class LeitnerApp {
     }
 
     setCurrentCSV(csvName = 'default') {
+        const previous = this.currentCSV;
         this.currentCSV = csvName || 'default';
+
+        if (previous && previous !== this.currentCSV && this.history?.recordInteraction) {
+            this.history.recordInteraction('csv-changed', {
+                from: previous,
+                to: this.currentCSV
+            });
+        }
 
         if (this.currentCSV === 'default') {
             this.storage.removeItem(LAST_CSV_KEY);
