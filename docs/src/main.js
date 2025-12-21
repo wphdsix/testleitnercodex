@@ -1,6 +1,6 @@
 /**
  * LEITNER SYSTEM - MAIN LOGIC
- * Version: 3.2 (Date & Heure précises + Sauvegarde LastReview)
+ * Version: 3.3 (Aperçu global & Radio Buttons)
  */
 
 // --- CONSTANTES ---
@@ -8,10 +8,9 @@ const STORAGE_KEYS = {
     SESSION: 'leitner_active_session',
     HISTORY: 'leitner_session_history',
     CONFIG: 'leitner_config',
-    CARD_STATE: 'leitner_card_state' // Renommé pour inclure box + date
+    CARD_STATE: 'leitner_card_state'
 };
 
-// Intervalles (jours)
 const BOX_INTERVALS = { 1: 1, 2: 3, 3: 7, 4: 14, 5: 30 };
 
 const APP_STATE = {
@@ -21,7 +20,7 @@ const APP_STATE = {
     config: { owner: 'leitexper1', repo: 'testleitnercodex', branch: 'main', path: 'docs/' }
 };
 
-// --- 1. PERSISTANCE DES DONNÉES (Boîte + Date) ---
+// --- 1. PERSISTANCE ---
 
 const CardPersistence = {
     getStoredState: (filename) => {
@@ -33,24 +32,17 @@ const CardPersistence = {
     updateCard: (filename, cardId, box, lastReview) => {
         const allStates = JSON.parse(localStorage.getItem(STORAGE_KEYS.CARD_STATE) || '{}');
         if (!allStates[filename]) allStates[filename] = {};
-        
-        // On sauvegarde la boîte ET la date de révision
         allStates[filename][cardId] = { box, lastReview };
-        
         localStorage.setItem(STORAGE_KEYS.CARD_STATE, JSON.stringify(allStates));
     },
 
-    // Migrer les anciennes données si nécessaire (v3.0/3.1 stockait juste un nombre)
     applyState: (filename, csvData) => {
         const stored = CardPersistence.getStoredState(filename);
         csvData.forEach(card => {
             const state = stored[card.id];
             if (state) {
-                if (typeof state === 'number') {
-                    // Migration ancienne version (juste le numéro de boîte)
-                    card.box = state;
-                } else {
-                    // Nouvelle version (objet complet)
+                if (typeof state === 'number') card.box = state;
+                else {
                     if (state.box) card.box = state.box;
                     if (state.lastReview) card.lastReview = state.lastReview;
                 }
@@ -227,7 +219,7 @@ const SessionManager = {
 
     pauseAndExit: () => {
         CoreApp.closeFlashcard();
-        alert("Session sauvegardée ! Vous pourrez la reprendre depuis l'onglet Statistiques.");
+        alert("Session sauvegardée !");
     },
 
     complete: () => {
@@ -359,18 +351,17 @@ const CoreApp = {
                 if(!response.ok) throw new Error("Fichier introuvable");
                 
                 const text = await response.text();
-                // 1. Parsing
                 let data = CoreApp.parseCSV(text);
-                
-                // 2. Application de la persistance locale (Boîte + Date)
                 data = CardPersistence.applyState(filename, data);
                 
                 CoreApp.csvData = data;
                 CoreApp.csvData.filename = filename;
 
-                // 3. Rendu
+                // 1. Rendu des boîtes
                 CoreApp.renderBoxes();
-                CoreApp.renderPreviewList(1); 
+                
+                // 2. Rendu des contenus de boîtes (NOUVEAU)
+                CoreApp.renderDeckOverview(); 
 
                 status.textContent = `${CoreApp.csvData.length} cartes chargées.`;
                 status.className = "mt-2 w-full text-sm text-green-600";
@@ -393,9 +384,6 @@ const CoreApp = {
         });
         document.getElementById('right-answer').addEventListener('click', () => CoreApp.handleAnswer(true));
         document.getElementById('wrong-answer').addEventListener('click', () => CoreApp.handleAnswer(false));
-        document.getElementById('close-cards-list').addEventListener('click', () => {
-            document.getElementById('cards-list-container').classList.add('hidden');
-        });
         
         document.querySelectorAll('.modal .close, .flashcard-container, #admin-panel, #github-guide-modal').forEach(el => {
             el.addEventListener('click', (e) => {
@@ -416,7 +404,7 @@ const CoreApp = {
         el.classList.add('hidden');
         el.setAttribute('aria-hidden', 'true');
         CoreApp.renderBoxes();
-        CoreApp.renderPreviewList(1);
+        CoreApp.renderDeckOverview(); // Mise à jour de l'affichage global
     },
 
     parseCSV: (text) => {
@@ -443,7 +431,6 @@ const CoreApp = {
         });
     },
 
-    // Affiche DATE ET HEURE
     getNextReviewDateForBox: (boxNum, cards) => {
         const now = new Date();
         let earliestDate = null;
@@ -451,7 +438,6 @@ const CoreApp = {
         const intervalDays = BOX_INTERVALS[boxNum] || 1;
 
         cards.forEach(card => {
-            // Si pas de date, c'est immédiat
             if (!card.lastReview) {
                 pendingCount++;
             } else {
@@ -459,8 +445,6 @@ const CoreApp = {
                 if (!isNaN(last.getTime())) {
                     const next = new Date(last);
                     next.setDate(last.getDate() + intervalDays);
-                    
-                    // Comparaison précise
                     if (next <= now) pendingCount++;
                     else {
                         if (!earliestDate || next < earliestDate) earliestDate = next;
@@ -470,14 +454,11 @@ const CoreApp = {
         });
 
         if (pendingCount > 0) return { text: "Maintenant", count: pendingCount, urgent: true };
-        
         if (earliestDate) {
-            // Formatage avec Heure : "22/12 à 14:30"
             const dateStr = earliestDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'numeric' });
             const timeStr = earliestDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
             return { text: `${dateStr} à ${timeStr}`, count: 0, urgent: false };
         }
-        
         return { text: "Aucune", count: 0, urgent: false };
     },
 
@@ -513,38 +494,55 @@ const CoreApp = {
         });
     },
 
-    renderPreviewList: (boxNum) => {
-        const listContainer = document.getElementById('cards-list-container');
-        const listBody = document.getElementById('cards-list');
-        document.getElementById('current-box-number').textContent = boxNum;
+    // --- NOUVELLE FONCTION D'AFFICHAGE GLOBAL ---
+    renderDeckOverview: () => {
+        const container = document.getElementById('deck-overview-container');
+        if(!container) return;
         
-        const cards = CoreApp.csvData.filter(c => c.box === boxNum);
-        listBody.innerHTML = '';
+        container.innerHTML = ''; // Nettoyer
         
-        if (cards.length === 0) {
-            listBody.innerHTML = '<p class="text-gray-500 col-span-full text-center py-4">Aucune carte dans cette boîte.</p>';
-        } else {
-            cards.forEach(card => {
-                const cardEl = document.createElement('div');
-                cardEl.className = 'border rounded p-3 hover:bg-gray-50 text-sm flex gap-3';
-                let imgHtml = '';
-                const imgUrl = CoreApp.buildImageUrl(card.qImage, 'q');
-                if (imgUrl) {
-                    imgHtml = `<div class="w-12 h-12 flex-shrink-0 bg-gray-200 rounded overflow-hidden"><img src="${imgUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'"></div>`;
-                }
+        // On boucle sur toutes les boîtes pour les afficher les unes après les autres
+        [1, 2, 3, 4, 5].forEach(boxNum => {
+            const cards = CoreApp.csvData.filter(c => c.box === boxNum);
+            
+            // On n'affiche que si la boîte contient des cartes
+            if (cards.length > 0) {
+                // Section de la boîte
+                const section = document.createElement('div');
+                section.className = 'bg-white rounded-lg shadow-md p-5';
                 
-                // Affichage de la date pour débogage visuel
-                let dateInfo = '';
-                if(card.lastReview) {
-                    const d = new Date(card.lastReview);
-                    dateInfo = `<span class="text-xs text-gray-400 block mt-1">Vu le ${d.toLocaleDateString()} à ${d.toLocaleTimeString()}</span>`;
-                }
+                const title = document.createElement('h3');
+                title.className = `text-xl font-bold mb-4 text-box${boxNum} border-b pb-2`;
+                title.textContent = `Boîte ${boxNum} (${cards.length} cartes)`;
+                section.appendChild(title);
+                
+                const grid = document.createElement('div');
+                grid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3';
+                
+                cards.forEach(card => {
+                    const cardEl = document.createElement('div');
+                    cardEl.className = 'border rounded p-3 hover:bg-gray-50 text-sm flex gap-3';
+                    
+                    let imgHtml = '';
+                    const imgUrl = CoreApp.buildImageUrl(card.qImage, 'q');
+                    if (imgUrl) {
+                        imgHtml = `<div class="w-12 h-12 flex-shrink-0 bg-gray-200 rounded overflow-hidden"><img src="${imgUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'"></div>`;
+                    }
+                    
+                    let dateInfo = '';
+                    if(card.lastReview) {
+                        const d = new Date(card.lastReview);
+                        dateInfo = `<span class="text-xs text-gray-400 block mt-1">Vu : ${d.toLocaleDateString()} ${d.toLocaleTimeString()}</span>`;
+                    }
 
-                cardEl.innerHTML = `${imgHtml}<div class="flex-1 min-w-0"><p class="font-semibold text-gray-800 truncate">${card.question}</p><p class="text-gray-500 truncate">${card.answer}</p>${dateInfo}</div>`;
-                listBody.appendChild(cardEl);
-            });
-        }
-        listContainer.classList.remove('hidden');
+                    cardEl.innerHTML = `${imgHtml}<div class="flex-1 min-w-0"><p class="font-semibold text-gray-800 truncate" title="${card.question}">${card.question}</p><p class="text-gray-500 truncate" title="${card.answer}">${card.answer}</p>${dateInfo}</div>`;
+                    grid.appendChild(cardEl);
+                });
+                
+                section.appendChild(grid);
+                container.appendChild(section);
+            }
+        });
     },
 
     buildImageUrl: (filename, type) => {
@@ -582,7 +580,10 @@ const CoreApp = {
         document.getElementById('answer-section').classList.add('hidden');
         document.getElementById('show-answer-btn').classList.remove('hidden');
 
-        // Injection du bouton Quitter
+        // NOUVEAU : Reset du bouton radio sur "Normale"
+        const normalRadio = document.getElementById('difficulty-normal');
+        if(normalRadio) normalRadio.checked = true;
+
         const qSection = document.querySelector('.question-section');
         const oldQuit = document.getElementById('temp-quit-btn');
         if(oldQuit) oldQuit.remove();
@@ -615,23 +616,16 @@ const CoreApp = {
         if(card) {
             const oldBox = parseInt(card.box) || 1;
             let newBox = oldBox;
-
             if(isCorrect) {
                 if(newBox < 5) newBox++;
             } else {
                 newBox = 1;
             }
 
-            // --- MISE À JOUR CRITIQUE ---
-            // 1. On change la boîte
             card.box = newBox;
-            // 2. On met à jour la date de révision à MAINTENANT
             card.lastReview = new Date().toISOString(); 
-            
-            // 3. On sauvegarde le tout (boîte + date)
             CardPersistence.updateCard(CoreApp.csvData.filename, cardId, newBox, card.lastReview);
             
-            // FEEDBACK VISUEL
             const feedback = document.createElement('div');
             feedback.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-6 py-4 rounded-xl font-bold text-white shadow-2xl z-[100] text-xl flex flex-col items-center gap-2 animate-bounce ${isCorrect ? 'bg-green-600' : 'bg-red-500'}`;
             

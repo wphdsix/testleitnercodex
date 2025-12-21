@@ -5,334 +5,328 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Système Leitner - Gestion de Flashcards</title>
     <link rel="stylesheet" href="style.css">
-        <!-- Icône du site (favicon) -->
     <link rel="icon" type="image/png" href="mordor-2340048_1280.png">
-    <!-- Variante avec un .ico classique -->
-    <!-- <link rel="icon" href="favicon.ico" type="image/x-icon"> -->
-</head>
-<script>
-  async function fetchCsvFilesFromGitHub() {
-    const owner = 'leitexper1';
-    const repo = 'testleitnercodex';
-    const branch = 'main';
-    const folderPath = 'docs';
-    const folderPrefix = folderPath.endsWith('/') ? folderPath : `${folderPath}/`;
-
-    const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
-    const response = await fetch(treeUrl);
-
-    if (!response.ok) {
-      throw new Error(`Erreur API GitHub : ${response.status}`);
-    }
-
-    const payload = await response.json();
-    if (!payload?.tree) {
-      throw new Error('Réponse inattendue de l’API GitHub.');
-    }
-
-    return payload.tree
-      .filter(item => item.type === 'blob' && item.path.startsWith(folderPrefix) && item.path.endsWith('.csv'))
-      .map(item => {
-        const relativePath = item.path.substring(folderPrefix.length);
-        const publicPath = item.path.startsWith('docs/') ? item.path.substring(5) : item.path;
-        const encodedPath = item.path
-          .split('/')
-          .map(segment => encodeURIComponent(segment))
-          .join('/');
-        const downloadUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodedPath}`;
-
-        return {
-          name: relativePath,
-          publicPath,
-          download_url: downloadUrl,
-          source: 'github'
-        };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-  }
-
-  async function fetchCsvFilesFromManifest() {
-    const manifestCandidates = ['csv-files.json', 'csv_manifest.json', '__csv_manifest.json'];
-
-    for (const manifestName of manifestCandidates) {
-      try {
-        const response = await fetch(manifestName, { cache: 'no-store' });
+    
+    <script>
+      async function fetchCsvFilesFromGitHub() {
+        const owner = 'leitexper1';
+        const repo = 'testleitnercodex';
+        const branch = 'main';
+        const folderPath = 'docs';
+        const folderPrefix = folderPath.endsWith('/') ? folderPath : `${folderPath}/`;
+    
+        const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+        const response = await fetch(treeUrl);
+    
         if (!response.ok) {
-          continue;
+          throw new Error(`Erreur API GitHub : ${response.status}`);
         }
-
+    
         const payload = await response.json();
-        const entries = Array.isArray(payload)
-          ? payload
-          : Array.isArray(payload?.files)
-            ? payload.files
-            : [];
-
-        const files = entries
-          .map(entry => {
-            if (typeof entry === 'string') {
-              return { name: entry, publicPath: entry };
-            }
-
-            const name = entry?.name || entry?.path || '';
-            const publicPath = entry?.publicPath || entry?.path || entry?.name || '';
-
-            return name && publicPath ? { name, publicPath } : null;
-          })
-          .filter(Boolean)
-          .map(file => {
-            let downloadUrl = '';
-            try {
-              downloadUrl = new URL(file.publicPath, window.location.href).href;
-            } catch (error) {
-              console.warn('Impossible de résoudre le chemin CSV local', file.publicPath, error);
-            }
-
+        if (!payload?.tree) {
+          throw new Error('Réponse inattendue de l’API GitHub.');
+        }
+    
+        return payload.tree
+          .filter(item => item.type === 'blob' && item.path.startsWith(folderPrefix) && item.path.endsWith('.csv'))
+          .map(item => {
+            const relativePath = item.path.substring(folderPrefix.length);
+            const publicPath = item.path.startsWith('docs/') ? item.path.substring(5) : item.path;
+            const encodedPath = item.path
+              .split('/')
+              .map(segment => encodeURIComponent(segment))
+              .join('/');
+            const downloadUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodedPath}`;
+    
             return {
-              ...file,
+              name: relativePath,
+              publicPath,
               download_url: downloadUrl,
-              source: 'manifest'
+              source: 'github'
             };
           })
-          .filter(file => !!file.download_url)
           .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-
-        if (files.length > 0) {
-          return files;
+      }
+    
+      async function fetchCsvFilesFromManifest() {
+        const manifestCandidates = ['csv-files.json', 'csv_manifest.json', '__csv_manifest.json'];
+    
+        for (const manifestName of manifestCandidates) {
+          try {
+            const response = await fetch(manifestName, { cache: 'no-store' });
+            if (!response.ok) {
+              continue;
+            }
+    
+            const payload = await response.json();
+            const entries = Array.isArray(payload)
+              ? payload
+              : Array.isArray(payload?.files)
+                ? payload.files
+                : [];
+    
+            const files = entries
+              .map(entry => {
+                if (typeof entry === 'string') {
+                  return { name: entry, publicPath: entry };
+                }
+    
+                const name = entry?.name || entry?.path || '';
+                const publicPath = entry?.publicPath || entry?.path || entry?.name || '';
+    
+                return name && publicPath ? { name, publicPath } : null;
+              })
+              .filter(Boolean)
+              .map(file => {
+                let downloadUrl = '';
+                try {
+                  downloadUrl = new URL(file.publicPath, window.location.href).href;
+                } catch (error) {
+                  console.warn('Impossible de résoudre le chemin CSV local', file.publicPath, error);
+                }
+    
+                return {
+                  ...file,
+                  download_url: downloadUrl,
+                  source: 'manifest'
+                };
+              })
+              .filter(file => !!file.download_url)
+              .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    
+            if (files.length > 0) {
+              return files;
+            }
+          } catch (error) {
+            console.warn(`Lecture du manifeste CSV local échouée (${manifestName})`, error);
+          }
         }
-      } catch (error) {
-        console.warn(`Lecture du manifeste CSV local échouée (${manifestName})`, error);
+    
+        return [];
       }
-    }
-
-    return [];
-  }
-
-  function mergeCsvFileLists(primary = [], secondary = []) {
-    const merged = [];
-    const seen = new Set();
-
-    [...primary, ...secondary].forEach((file) => {
-      const name = file?.name;
-      if (!name || seen.has(name)) {
-        return;
-      }
-      seen.add(name);
-      merged.push(file);
-    });
-
-    return merged.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-  }
-
-  function areCsvListsDifferent(next = [], previous = []) {
-    if (next.length !== previous.length) {
-      return true;
-    }
-
-    const namesA = next.map(file => file.name).sort((a, b) => a.localeCompare(b, 'fr'));
-    const namesB = previous.map(file => file.name).sort((a, b) => a.localeCompare(b, 'fr'));
-
-    return namesA.some((name, index) => name !== namesB[index]);
-  }
-
-  function populateCsvSelect(select, csvFiles, { preferredName = null, source = 'github', preserveSelection = true } = {}) {
-    if (!select) {
-      return;
-    }
-
-    const files = Array.isArray(csvFiles)
-      ? csvFiles.filter(file => !!file?.name)
-      : [];
-
-    const previousValue = preserveSelection
-      ? (preferredName ?? select.value ?? null)
-      : (preferredName ?? null);
-    const selectedName = files.find(file => file.name === previousValue)?.name
-      || files[0]?.name
-      || '';
-
-    if (window.leitnerApp?.ui?.populateCSVSelector) {
-      window.leitnerApp.ui.populateCSVSelector(files, { selectedName: selectedName || null });
-    } else {
-      select.innerHTML = '';
-
-      if (!files.length) {
-        const emptyOption = document.createElement('option');
-        emptyOption.value = '';
-        emptyOption.textContent = 'Aucun fichier .csv trouvé';
-        emptyOption.disabled = true;
-        select.appendChild(emptyOption);
-      } else {
-        files.forEach((file, index) => {
-          const option = document.createElement('option');
-          const name = file.name || file.publicPath || `csv-${index + 1}`;
-          option.value = name;
-          option.textContent = name;
-          option.dataset.name = name;
-          
-          if (file.download_url) {
-            option.dataset.downloadUrl = file.download_url;
+    
+      function mergeCsvFileLists(primary = [], secondary = []) {
+        const merged = [];
+        const seen = new Set();
+    
+        [...primary, ...secondary].forEach((file) => {
+          const name = file?.name;
+          if (!name || seen.has(name)) {
+            return;
           }
-
-          if (file.publicPath) {
-            option.dataset.publicPath = file.publicPath;
-          }
-
-          option.dataset.source = file.source || source || '';
-          if (name === selectedName) {
-            option.selected = true;
-          }
-
-          select.appendChild(option);
+          seen.add(name);
+          merged.push(file);
         });
+    
+        return merged.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
       }
-    }
-
-    if (!files.length) {
-      select.value = '';
-      select.dataset.hasFiles = 'false';
-    } else if (selectedName) {
-      select.value = selectedName;
-      select.dataset.hasFiles = 'true';
-    }
-
-    select.dataset.bootstrapSource = source;
-
-    const detail = {
-      files: files.map(file => ({ ...file })),
-      source,
-      selectedName: selectedName || null,
-      timestamp: Date.now()
-    };
-
-    window.__leitnerCSVBootstrap = detail;
-    window.dispatchEvent(new CustomEvent('leitner:csv-list-updated', { detail }));
-  }
-
-  async function loadCsvFiles({ preserveSelection = true } = {}) {
-    const select = document.getElementById('csv-selector');
-    if (!select) {
-      return;
-    }
-
-    select.disabled = true;
-    select.innerHTML = '<option value="">Recherche des fichiers…</option>';
-
-    try {
-      let githubFiles = [];
-      let source = 'github';
-
-      try {
-        githubFiles = await fetchCsvFilesFromGitHub();
-      } catch (error) {
-        console.warn('Chargement via GitHub impossible, tentative avec le manifeste local.', error);
-        source = 'manifest';
+    
+      function areCsvListsDifferent(next = [], previous = []) {
+        if (next.length !== previous.length) {
+          return true;
+        }
+    
+        const namesA = next.map(file => file.name).sort((a, b) => a.localeCompare(b, 'fr'));
+        const namesB = previous.map(file => file.name).sort((a, b) => a.localeCompare(b, 'fr'));
+    
+        return namesA.some((name, index) => name !== namesB[index]);
       }
-
-      let manifestFiles = [];
-
-      try {
-        manifestFiles = await fetchCsvFilesFromManifest();
-      } catch (error) {
-        console.warn('Chargement du manifeste local impossible.', error);
+    
+      function populateCsvSelect(select, csvFiles, { preferredName = null, source = 'github', preserveSelection = true } = {}) {
+        if (!select) {
+          return;
+        }
+    
+        const files = Array.isArray(csvFiles)
+          ? csvFiles.filter(file => !!file?.name)
+          : [];
+    
+        const previousValue = preserveSelection
+          ? (preferredName ?? select.value ?? null)
+          : (preferredName ?? null);
+        const selectedName = files.find(file => file.name === previousValue)?.name
+          || files[0]?.name
+          || '';
+    
+        if (window.leitnerApp?.ui?.populateCSVSelector) {
+          window.leitnerApp.ui.populateCSVSelector(files, { selectedName: selectedName || null });
+        } else {
+          select.innerHTML = '';
+    
+          if (!files.length) {
+            const emptyOption = document.createElement('option');
+            emptyOption.value = '';
+            emptyOption.textContent = 'Aucun fichier .csv trouvé';
+            emptyOption.disabled = true;
+            select.appendChild(emptyOption);
+          } else {
+            files.forEach((file, index) => {
+              const option = document.createElement('option');
+              const name = file.name || file.publicPath || `csv-${index + 1}`;
+              option.value = name;
+              option.textContent = name;
+              option.dataset.name = name;
+              
+              if (file.download_url) {
+                option.dataset.downloadUrl = file.download_url;
+              }
+    
+              if (file.publicPath) {
+                option.dataset.publicPath = file.publicPath;
+              }
+    
+              option.dataset.source = file.source || source || '';
+              if (name === selectedName) {
+                option.selected = true;
+              }
+    
+              select.appendChild(option);
+            });
+          }
+        }
+    
+        if (!files.length) {
+          select.value = '';
+          select.dataset.hasFiles = 'false';
+        } else if (selectedName) {
+          select.value = selectedName;
+          select.dataset.hasFiles = 'true';
+        }
+    
+        select.dataset.bootstrapSource = source;
+    
+        const detail = {
+          files: files.map(file => ({ ...file })),
+          source,
+          selectedName: selectedName || null,
+          timestamp: Date.now()
+        };
+    
+        window.__leitnerCSVBootstrap = detail;
+        window.dispatchEvent(new CustomEvent('leitner:csv-list-updated', { detail }));
       }
-
-      const csvFiles = mergeCsvFileLists(githubFiles, manifestFiles);
-
-      if (manifestFiles.length && !githubFiles.length) {
-        source = 'manifest';
-      } else if (manifestFiles.length && githubFiles.length) {
-        source = 'mixed';
+    
+      async function loadCsvFiles({ preserveSelection = true } = {}) {
+        const select = document.getElementById('csv-selector');
+        if (!select) {
+          return;
+        }
+    
+        select.disabled = true;
+        select.innerHTML = '<option value="">Recherche des fichiers…</option>';
+    
+        try {
+          let githubFiles = [];
+          let source = 'github';
+    
+          try {
+            githubFiles = await fetchCsvFilesFromGitHub();
+          } catch (error) {
+            console.warn('Chargement via GitHub impossible, tentative avec le manifeste local.', error);
+            source = 'manifest';
+          }
+    
+          let manifestFiles = [];
+    
+          try {
+            manifestFiles = await fetchCsvFilesFromManifest();
+          } catch (error) {
+            console.warn('Chargement du manifeste local impossible.', error);
+          }
+    
+          const csvFiles = mergeCsvFileLists(githubFiles, manifestFiles);
+    
+          if (manifestFiles.length && !githubFiles.length) {
+            source = 'manifest';
+          } else if (manifestFiles.length && githubFiles.length) {
+            source = 'mixed';
+          }
+    
+          const preferredName = preserveSelection
+            ? (select.value || window.__leitnerCSVBootstrap?.selectedName || null)
+            : (window.__leitnerCSVBootstrap?.selectedName || null);
+    
+          populateCsvSelect(select, csvFiles, { preferredName, source, preserveSelection });
+        } catch (err) {
+          console.error('Impossible de charger les fichiers CSV :', err);
+          select.innerHTML = '<option value="">Erreur de chargement</option>';
+          return;
+        } finally {
+          const bs = window.__leitnerCSVBootstrap; 
+          const hasFiles = bs && Array.isArray(bs.files) && bs.files.length > 0;
+          select.disabled = !hasFiles;
+        }
       }
-
-      const preferredName = preserveSelection
-        ? (select.value || window.__leitnerCSVBootstrap?.selectedName || null)
-        : (window.__leitnerCSVBootstrap?.selectedName || null);
-
-      populateCsvSelect(select, csvFiles, { preferredName, source, preserveSelection });
-    } catch (err) {
-      console.error('Impossible de charger les fichiers CSV :', err);
-      select.innerHTML = '<option value="">Erreur de chargement</option>';
-      return;
-    } finally {
-      // Correction : on récupère la variable globale définie plus haut
-      const bs = window.__leitnerCSVBootstrap; 
-      const hasFiles = bs && Array.isArray(bs.files) && bs.files.length > 0;
-      select.disabled = !hasFiles;
-    }
-  }
-
-  async function checkForLocalCsvUpdates() {
-    const select = document.getElementById('csv-selector');
-    if (!select) {
-      return;
-    }
-
-    try {
-      const localFiles = await fetchCsvFilesFromManifest();
-      if (!localFiles.length) {
-        return;
+    
+      async function checkForLocalCsvUpdates() {
+        const select = document.getElementById('csv-selector');
+        if (!select) {
+          return;
+        }
+    
+        try {
+          const localFiles = await fetchCsvFilesFromManifest();
+          if (!localFiles.length) {
+            return;
+          }
+    
+          const bootstrap = window.__leitnerCSVBootstrap || {};
+          const currentFiles = Array.isArray(bootstrap.files) ? bootstrap.files : [];
+          const remoteFiles = currentFiles.filter(file => file.source && file.source !== 'manifest');
+          const combined = mergeCsvFileLists(remoteFiles, localFiles);
+    
+          if (!areCsvListsDifferent(combined, currentFiles)) {
+            return;
+          }
+    
+          const beforeValue = select.value || bootstrap.selectedName || null;
+          const source = remoteFiles.length ? 'mixed' : 'manifest';
+    
+          populateCsvSelect(select, combined, { preferredName: beforeValue, source });
+    
+          if (!beforeValue && select.value) {
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+    
+          const hasFiles = Array.isArray(bootstrap.files) && bootstrap.files.length > 0;
+          select.disabled = !hasFiles;
+        } catch (error) {
+          console.warn('Surveillance des fichiers CSV locaux échouée', error);
+        }
       }
-
-      const bootstrap = window.__leitnerCSVBootstrap || {};
-      const currentFiles = Array.isArray(bootstrap.files) ? bootstrap.files : [];
-      const remoteFiles = currentFiles.filter(file => file.source && file.source !== 'manifest');
-      const combined = mergeCsvFileLists(remoteFiles, localFiles);
-
-      if (!areCsvListsDifferent(combined, currentFiles)) {
-        return;
+    
+      function startCsvWatcher(intervalMs = 8000) {
+        if (window.__leitnerCSVWatcherId) {
+          window.clearInterval(window.__leitnerCSVWatcherId);
+        }
+    
+        window.__leitnerCSVWatcherId = window.setInterval(checkForLocalCsvUpdates, intervalMs);
+        checkForLocalCsvUpdates();
       }
-
-      const beforeValue = select.value || bootstrap.selectedName || null;
-      const source = remoteFiles.length ? 'mixed' : 'manifest';
-
-      populateCsvSelect(select, combined, { preferredName: beforeValue, source });
-
-      if (!beforeValue && select.value) {
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-
-      const hasFiles = Array.isArray(bootstrap.files) && bootstrap.files.length > 0;
-      select.disabled = !hasFiles;
-    } catch (error) {
-      console.warn('Surveillance des fichiers CSV locaux échouée', error);
-    }
-  }
-
-  function startCsvWatcher(intervalMs = 8000) {
-    if (window.__leitnerCSVWatcherId) {
-      window.clearInterval(window.__leitnerCSVWatcherId);
-    }
-
-    window.__leitnerCSVWatcherId = window.setInterval(checkForLocalCsvUpdates, intervalMs);
-    checkForLocalCsvUpdates();
-  }
-
-  // Charger au démarrage
-  document.addEventListener('DOMContentLoaded', () => {
-    loadCsvFiles({ preserveSelection: false })
-      .catch(error => console.error('Chargement initial des CSV échoué', error))
-      .finally(() => {
-        startCsvWatcher();
+    
+      document.addEventListener('DOMContentLoaded', () => {
+        loadCsvFiles({ preserveSelection: false })
+          .catch(error => console.error('Chargement initial des CSV échoué', error))
+          .finally(() => {
+            startCsvWatcher();
+          });
       });
-  });
-
-
-  function openImportExport() {
-    const select = document.getElementById('csv-selector');
-    const selectedOption = select?.selectedOptions?.[0];
-    const selectedFile = selectedOption?.dataset?.downloadUrl
-      || selectedOption?.dataset?.publicPath
-      || selectedOption?.value;
-
-    if (!selectedFile) {
-      alert('Veuillez sélectionner un fichier CSV.');
-      return;
-    }
-    const url = `import-export.html?csv=${encodeURIComponent(selectedFile)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
-</script>
+    
+      function openImportExport() {
+        const select = document.getElementById('csv-selector');
+        const selectedOption = select?.selectedOptions?.[0];
+        const selectedFile = selectedOption?.dataset?.downloadUrl
+          || selectedOption?.dataset?.publicPath
+          || selectedOption?.value;
+    
+        if (!selectedFile) {
+          alert('Veuillez sélectionner un fichier CSV.');
+          return;
+        }
+        const url = `import-export.html?csv=${encodeURIComponent(selectedFile)}`;
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    </script>
 <body class="site-background text-gray-800">
     <div class="container mx-auto max-w-6xl p-5">
         <header class="text-center mb-8">
@@ -359,13 +353,12 @@
                 <button id="tab-stats-trigger" class="tab-button" role="tab" aria-selected="false" aria-controls="tab-stats" data-tab-target="stats">
                     Statistiques
                 </button>
-            <!-- Bouton dédié à la page avancée -->
-            <button id="open-import-export" class="tab-button" type="button" data-action="open-import-export" aria-haspopup="dialog">
-                Import / Export avancé
-            </button>
+                <button id="open-import-export" class="tab-button" type="button" data-action="open-import-export" aria-haspopup="dialog">
+                    Import / Export avancé
+                </button>
             </nav>
+            
             <section id="tab-review" class="tab-panel space-y-6" role="tabpanel" aria-labelledby="tab-review-trigger" data-tab-panel="review">
-                <!-- Section gestion des fichiers -->
                 <div class="bg-white rounded-lg shadow-md p-5">
                     <div class="flex flex-wrap justify-between items-center mb-4">
                         <h2 class="text-xl font-bold mb-4 md:mb-0 w-full">Gestion des fichiers CSV</h2>
@@ -379,23 +372,12 @@
                     </div>
                 </div>
 
-                <!-- Boîtes Leitner -->
                 <div id="leitner-boxes" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                    <!-- Les boîtes seront générées dynamiquement -->
-                </div>
-
-                <!-- Liste des cartes -->
-                <div id="cards-list-container" class="hidden bg-white rounded-lg shadow-md p-5">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 id="cards-list-title" class="text-xl font-bold">Cartes de la boîte <span id="current-box-number">1</span></h3>
-                        <button id="close-cards-list" class="text-gray-500 hover:text-gray-700">
-                            ✕
-                        </button>
                     </div>
-                    <div id="cards-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
-                </div>
 
-                <!-- Éditeur de carte -->
+                <div id="deck-overview-container" class="space-y-6">
+                    </div>
+
                 <div id="card-editor" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="editor-title" aria-hidden="true">
                     <div class="bg-white rounded-xl shadow-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto" tabindex="-1">
                         <h3 class="text-xl font-bold mb-4" id="editor-title">Nouvelle carte</h3>
@@ -457,13 +439,11 @@
                     </div>
                 </div>
 
-                <!-- Visualisateur de carte -->
                 <div id="flashcard-container" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="question-content" aria-hidden="true">
                     <div class="flashcard bg-white rounded-xl shadow-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto" tabindex="-1">
                         <div class="question-section bg-gray-50 rounded-lg p-4 mb-5">
                             <h3 class="font-bold text-lg mb-3">Question</h3>
                             <div id="question-content" class="text-lg my-4"></div>
-                            <div id="last-reviewed" class="text-sm text-gray-500 italic"></div>
                         </div>
                         <button id="show-answer-btn" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 mb-5">
                             Voir la réponse
@@ -471,16 +451,25 @@
                         <div id="answer-section" class="hidden bg-gray-100 rounded-lg p-4 mt-5">
                             <h3 class="font-bold text-lg mb-3">Réponse</h3>
                             <div id="answer-content" class="text-lg my-4"></div>
-                            <div class="flex flex-wrap items-center gap-3 mt-2">
-                                <label for="answer-difficulty" class="text-sm font-medium text-gray-600">
-                                    Difficulté ressentie
-                                </label>
-                                <select id="answer-difficulty" class="flex-1 min-w-[120px] p-2 border rounded">
-                                    <option value="easy">Facile</option>
-                                    <option value="normal" selected>Normale</option>
-                                    <option value="hard">Difficile</option>
-                                </select>
+                            
+                            <div class="mt-4 border-t pt-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Difficulté ressentie :</label>
+                                <div class="flex flex-wrap gap-4" id="difficulty-options">
+                                    <label class="inline-flex items-center cursor-pointer bg-white px-3 py-2 rounded border hover:bg-gray-50">
+                                        <input type="radio" name="difficulty" value="easy" class="w-4 h-4 text-green-600 border-gray-300 focus:ring-green-500">
+                                        <span class="ml-2 text-sm font-medium text-gray-700">Facile</span>
+                                    </label>
+                                    <label class="inline-flex items-center cursor-pointer bg-white px-3 py-2 rounded border hover:bg-gray-50">
+                                        <input type="radio" id="difficulty-normal" name="difficulty" value="normal" class="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500" checked>
+                                        <span class="ml-2 text-sm font-medium text-gray-700">Normale</span>
+                                    </label>
+                                    <label class="inline-flex items-center cursor-pointer bg-white px-3 py-2 rounded border hover:bg-gray-50">
+                                        <input type="radio" name="difficulty" value="hard" class="w-4 h-4 text-red-600 border-gray-300 focus:ring-red-500">
+                                        <span class="ml-2 text-sm font-medium text-gray-700">Difficile</span>
+                                    </label>
+                                </div>
                             </div>
+
                             <div class="flex flex-wrap gap-3 mt-6">
                                 <button id="wrong-answer" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold hover:bg-red-600">
                                     Faux
@@ -501,12 +490,10 @@
                     </div>
                 </div>
 
-                <!-- Bouton Admin -->
                 <div class="admin-button" id="admin-button">
                     ⚙️
                 </div>
 
-                <!-- Panel Admin -->
                 <div id="admin-panel" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="admin-panel-title" aria-hidden="true" tabindex="-1">
                     <div class="bg-white rounded-xl shadow-2xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
                         <div class="flex justify-between items-center mb-4">
@@ -517,7 +504,6 @@
                         </div>
 
                         <div class="space-y-6">
-                            <!-- Configuration GitHub -->
                             <div class="github-config bg-gray-100 rounded-lg p-4">
                                 <h4 class="font-bold text-lg mb-3">Configuration GitHub</h4>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -549,83 +535,6 @@
                                     </button>
                                     <button id="open-github-guide" class="bg-slate-700 text-white px-4 py-2 rounded hover:bg-slate-800">
                                         📘 Explication du processus
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Intervalles de révision -->
-                            <div class="intervals-config bg-gray-100 rounded-lg p-4">
-                                <h4 class="font-bold text-lg mb-3">Intervalles de révision (en heures)</h4>
-                                <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Boîte 1</label>
-                                        <input type="number" id="interval-1" class="interval-input p-2 border rounded" min="1" value="1">
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Boîte 2</label>
-                                        <input type="number" id="interval-2" class="interval-input p-2 border rounded" min="1" value="3">
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Boîte 3</label>
-                                        <input type="number" id="interval-3" class="interval-input p-2 border rounded" min="1" value="9">
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Boîte 4</label>
-                                        <input type="number" id="interval-4" class="interval-input p-2 border rounded" min="1" value="27">
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Boîte 5</label>
-                                        <input type="number" id="interval-5" class="interval-input p-2 border rounded" min="1" value="81">
-                                    </div>
-                                </div>
-                                <div class="mt-4 flex justify-end">
-                                    <button id="save-intervals" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-                                        Sauvegarder les intervalles
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div class="difficulty-config bg-gray-100 rounded-lg p-4">
-                                <h4 class="font-bold text-lg mb-3">Difficultés</h4>
-                                <p class="text-sm text-gray-600 mb-4">Ajustez la pondération appliquée aux intervalles selon la difficulté perçue.</p>
-                                <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Facile</label>
-                                        <input type="number" step="0.1" min="0.1" id="difficulty-easy" class="w-full p-2 border rounded" value="0.8">
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Normale</label>
-                                        <input type="number" step="0.1" min="0.1" id="difficulty-normal" class="w-full p-2 border rounded" value="1">
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Difficile</label>
-                                        <input type="number" step="0.1" min="0.1" id="difficulty-hard" class="w-full p-2 border rounded" value="1.4">
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Difficulté par défaut</label>
-                                        <select id="default-difficulty" class="w-full p-2 border rounded">
-                                            <option value="easy">Facile</option>
-                                            <option value="normal" selected>Normale</option>
-                                            <option value="hard">Difficile</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="mt-4 flex justify-end">
-                                    <button id="save-difficulties" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">
-                                        Sauvegarder les difficultés
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Actions administratives -->
-                            <div class="admin-actions bg-gray-100 rounded-lg p-4">
-                                <h4 class="font-bold text-lg mb-3">Actions</h4>
-                                <div class="flex flex-wrap gap-2">
-                                    <button id="reset-all" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
-                                        Réinitialiser toutes les données
-                                    </button>
-                                    <button id="export-all" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-                                        Exporter toutes les données
                                     </button>
                                 </div>
                             </div>
@@ -706,7 +615,6 @@
             </div>
         </div>
 
-        <!-- Guide GitHub -->
         <div id="github-guide-modal" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="github-guide-title" aria-hidden="true" tabindex="-1">
             <div class="github-guide__dialog" role="document">
                 <div class="github-guide__header">
@@ -719,84 +627,6 @@
                     <p class="github-guide__intro">
                         Ce guide détaille pas à pas la création de votre compte GitHub, la connexion, la réalisation d'un fork du projet et la configuration des champs ci-dessus. Chaque étape est pensée pour un public débutant : prenez votre temps, suivez l'ordre proposé et insérez vos propres captures dans les emplacements prévus pour conserver un mémo visuel.
                     </p>
-
-                    <section class="github-guide__step">
-                        <h4 class="github-guide__step-title">1. Créer un compte GitHub</h4>
-                        <ol class="github-guide__list">
-                            <li>Ouvrez votre navigateur et rendez-vous sur <strong><a href="https://github.com" target="_blank" rel="noopener">github.com</a></strong>.</li>
-                            <li>Cliquez sur <strong>Sign&nbsp;up</strong> (Inscription), indiquez votre e-mail, choisissez un mot de passe sécurisé puis validez l'envoi du code de vérification.</li>
-                            <li>Renseignez votre nom d'utilisateur GitHub. Ce sera le «&nbsp;propriétaire du dépôt&nbsp;» à saisir dans l'application.</li>
-                            <li>Finalisez l'inscription en acceptant les conditions d'utilisation et en vérifiant votre adresse e-mail via le code reçu.</li>
-                        </ol>
-                        <div class="github-guide__image-wrapper" data-guide-image="images_guides/github-step1.png" data-guide-alt="Formulaire d'inscription GitHub" data-guide-label="github-step1.png"></div>
-                    </section>
-
-                    <section class="github-guide__step">
-                        <h4 class="github-guide__step-title">2. Se connecter à son compte</h4>
-                        <ol class="github-guide__list">
-                            <li>Retournez sur <strong>github.com</strong> et cliquez sur <strong>Sign&nbsp;in</strong> (Connexion).</li>
-                            <li>Saisissez l'e-mail et le mot de passe créés à l'étape précédente.</li>
-                            <li>Activez l'authentification à deux facteurs si GitHub vous le propose&nbsp;: cela renforce la sécurité de votre compte.</li>
-                            <li>Une fois connecté, vérifiez que votre avatar apparaît en haut à droite&nbsp;: cela confirme que vous êtes bien dans votre espace personnel.</li>
-                        </ol>
-                        <div class="github-guide__image-wrapper" data-guide-image="images_guides/github-step2.png" data-guide-alt="Connexion à GitHub" data-guide-label="github-step2.png"></div>
-                    </section>
-
-                    <section class="github-guide__step">
-                        <h4 class="github-guide__step-title">3. Forker le projet</h4>
-                        <ol class="github-guide__list">
-                            <li>Depuis la page du dépôt principal du projet, cliquez sur le bouton <strong>Fork</strong> situé en haut à droite.</li>
-                            <li>GitHub vous demande de confirmer le nom du dépôt de destination. Conservez le nom proposé ou personnalisez-le, puis validez.</li>
-                            <li>Patientez quelques secondes pendant la copie du dépôt dans votre espace personnel.</li>
-                            <li>À la fin du processus, vous basculez automatiquement sur votre copie&nbsp;: l'en-tête de la page doit afficher <code>votre-nom-utilisateur/nom-du-dépôt</code>.</li>
-                        </ol>
-                        <div class="github-guide__callout">
-                            Astuce&nbsp;: le fork est votre espace de travail. Vous pouvez y ajouter vos cartes, images ou textes sans impacter le dépôt original.
-                        </div>
-                        <div class="github-guide__image-wrapper" data-guide-image="images_guides/github-step3.png" data-guide-alt="Bouton Fork sur GitHub" data-guide-label="github-step3.png"></div>
-                    </section>
-
-                    <section class="github-guide__step">
-                        <h4 class="github-guide__step-title">4. Explorer son fork</h4>
-                        <ol class="github-guide__list">
-                            <li>Dans votre fork, utilisez le bouton <strong>Add file &gt; Upload files</strong> pour ajouter des images ou des CSV personnels si nécessaire.</li>
-                            <li>Repérez la barre d'adresse de votre navigateur&nbsp;: elle contient l'URL complète de votre dépôt, par exemple <code>https://github.com/votre-nom-utilisateur/leitexp</code>.</li>
-                            <li>Notez les dossiers utilisés par l'application&nbsp;: par défaut les fichiers se trouvent dans <code>docs/</code>, mais vous pouvez créer vos propres dossiers si vous en déclarez le chemin.</li>
-                            <li>Vérifiez que les fichiers indispensables (CSV, images) sont bien présents avant de passer à la configuration dans l'application.</li>
-                        </ol>
-                        <div class="github-guide__image-wrapper" data-guide-image="images_guides/github-step4.png" data-guide-alt="Exploration du dépôt GitHub" data-guide-label="github-step4.png"></div>
-                    </section>
-
-                    <section class="github-guide__step">
-                        <h4 class="github-guide__step-title">5. Configurer l'application depuis le panneau administrateur</h4>
-                        <ol class="github-guide__list">
-                            <li>Ouvrez le menu administrateur (icône ⚙️ en bas à droite) puis repérez la section <strong>Configuration GitHub</strong>.</li>
-                            <li>Renseignez <strong>Propriétaire du dépôt</strong> avec votre nom d'utilisateur GitHub.</li>
-                            <li>Indiquez <strong>Nom du dépôt</strong> tel qu'il apparaît sur votre fork.</li>
-                            <li>Complétez <strong>Chemin du dossier</strong> avec le répertoire contenant vos fichiers (ex. <code>docs/</code> ou <code>docs/mes-cartes/</code>).</li>
-                            <li>Laissez le <strong>token d'accès</strong> vide si votre dépôt est public. Pour un dépôt privé, créez un token classique (<em>classic token</em>) et copiez-le ici.</li>
-                            <li>Cliquez sur <strong>Charger les fichiers depuis GitHub</strong> pour synchroniser les CSV et images.</li>
-                        </ol>
-                        <div class="github-guide__callout">
-                            Bon à savoir&nbsp;: les captures placées dans <code>docs/images_guides/</code> s'affichent automatiquement dans ce guide. Renommez vos fichiers selon les étapes (<code>github-step1.png</code>, <code>github-step2.png</code>, etc.) pour créer un pense-bête visuel.
-                        </div>
-                        <div class="github-guide__image-wrapper" data-guide-image="images_guides/github-step5.png" data-guide-alt="Configuration GitHub dans l'application" data-guide-label="github-step5.png"></div>
-                    </section>
-
-                    <section class="github-guide__step">
-                        <h4 class="github-guide__step-title">6. Comprendre ce qu'il faut faire dans son propre compte</h4>
-                        <ol class="github-guide__list">
-                            <li>Mettre à jour régulièrement votre fork en cliquant sur <strong>Sync fork</strong> pour récupérer les nouveautés du projet principal.</li>
-                            <li>Créer ou modifier vos cartes directement dans l'application puis exporter/committer les changements dans votre dépôt.</li>
-                            <li>Publier votre version avec GitHub Pages si vous souhaitez un accès en ligne (<strong>Settings &gt; Pages</strong> puis sélectionnez la branche et le dossier <code>docs/</code>).</li>
-                            <li>Partager l'URL générée par GitHub Pages avec vos élèves ou collègues.</li>
-                        </ol>
-                        <div class="github-guide__callout">
-                            Pensez à documenter vos choix dans un fichier <code>README.md</code> situé à la racine de votre fork pour garder une trace claire de vos adaptations pédagogiques.
-                        </div>
-                        <div class="github-guide__image-wrapper" data-guide-image="images_guides/github-step6.png" data-guide-alt="Publication GitHub Pages" data-guide-label="github-step6.png"></div>
-                    </section>
-
                     <footer class="github-guide__footer">
                         <p>Besoin d'un rappel rapide&nbsp;? Revenez à tout moment sur ce guide en cliquant sur <strong>📘 Explication du processus</strong> dans la section de configuration.</p>
                     </footer>
@@ -804,32 +634,14 @@
             </div>
         </div>
 
-        <!-- Modale Statistiques -->
         <div id="statsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="stats-modal-title" aria-hidden="true">
             <div class="modal-content" role="document">
                 <button type="button" class="close" data-action="close-stats" aria-label="Fermer la fenêtre Statistiques">&times;</button>
                 <h2 id="stats-modal-title" class="text-2xl font-bold mb-4">📊 Statistiques</h2>
-
-                <section id="currentSession" class="stats-modal__section stats-modal__current hidden" aria-live="polite">
-                    <h3 class="text-lg font-semibold mb-2">🟢 Session en cours</h3>
-                    <p id="sessionInfo" class="text-sm text-gray-700"></p>
-                    <button type="button" class="stats-modal__resume" data-action="resume-session">
-                        ▶️ Reprendre
-                    </button>
-                </section>
-
-                <section class="stats-modal__section">
-                    <h3 class="text-lg font-semibold">Historique</h3>
-                    <ul id="historyList" class="stats-history">
-                        <li class="stats-history__item">Aucune session terminée</li>
-                    </ul>
-                </section>
-            </div>
+                </div>
         </div>
 
-    <!-- Chargement des modules JavaScript -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module" src="src/main.js"></script>
 </body>
 </html>
-
