@@ -168,7 +168,8 @@
           const name = file.name || file.publicPath || `csv-${index + 1}`;
           option.value = name;
           option.textContent = name;
-
+          option.dataset.name = name;
+          
           if (file.download_url) {
             option.dataset.downloadUrl = file.download_url;
           }
