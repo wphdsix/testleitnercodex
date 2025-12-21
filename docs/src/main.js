@@ -1,6 +1,6 @@
 /**
  * LEITNER SYSTEM - MAIN LOGIC
- * Version: 3.0 (Persistence des boîtes & Bouton Quitter)
+ * Version: 3.1 (Feedback Visuel & Mise à jour Live)
  */
 
 // --- CONSTANTES ---
@@ -8,10 +8,9 @@ const STORAGE_KEYS = {
     SESSION: 'leitner_active_session',
     HISTORY: 'leitner_session_history',
     CONFIG: 'leitner_config',
-    BOX_STATE: 'leitner_box_state' // Nouveau : Sauvegarde l'état des boîtes
+    BOX_STATE: 'leitner_box_state'
 };
 
-// Intervalles (jours)
 const BOX_INTERVALS = { 1: 1, 2: 3, 3: 7, 4: 14, 5: 30 };
 
 const APP_STATE = {
@@ -21,38 +20,34 @@ const APP_STATE = {
     config: { owner: 'leitexper1', repo: 'testleitnercodex', branch: 'main', path: 'docs/' }
 };
 
-// --- 1. GESTION DE LA PERSISTANCE (LEITNER FIX) ---
+// --- 1. PERSISTANCE DES BOÎTES (Le Cœur du Système) ---
 
 const BoxPersistence = {
-    // Récupère l'état sauvegardé pour un fichier donné
     getStoredBoxes: (filename) => {
-        const allStates = JSON.parse(localStorage.getItem(STORAGE_KEYS.BOX_STATE) || '{}');
-        return allStates[filename] || {};
+        try {
+            return JSON.parse(localStorage.getItem(STORAGE_KEYS.BOX_STATE) || '{}')[filename] || {};
+        } catch (e) { return {}; }
     },
 
-    // Sauvegarde la nouvelle boîte d'une carte
     updateBox: (filename, cardId, newBox) => {
         const allStates = JSON.parse(localStorage.getItem(STORAGE_KEYS.BOX_STATE) || '{}');
         if (!allStates[filename]) allStates[filename] = {};
-        
         allStates[filename][cardId] = newBox;
         localStorage.setItem(STORAGE_KEYS.BOX_STATE, JSON.stringify(allStates));
     },
 
-    // Applique les boîtes sauvegardées aux données CSV brutes
     applyState: (filename, csvData) => {
         const stored = BoxPersistence.getStoredBoxes(filename);
         csvData.forEach(card => {
-            // Si une boîte est sauvegardée localement, on l'utilise
-            if (stored[card.id]) {
-                card.box = stored[card.id];
+            if (stored[card.id] !== undefined) {
+                card.box = parseInt(stored[card.id]);
             }
         });
         return csvData;
     }
 };
 
-// --- 2. UI & ADMIN ---
+// --- 2. GESTION UI & ADMIN ---
 
 const UI = {
     init: () => {
@@ -101,11 +96,7 @@ const UI = {
 
         document.getElementById('admin-button').addEventListener('click', () => toggleModal('admin-panel', true));
         document.getElementById('close-admin').addEventListener('click', () => toggleModal('admin-panel', false));
-        
-        document.getElementById('load-github-csv').addEventListener('click', () => {
-            UI.saveConfig();
-            location.reload();
-        });
+        document.getElementById('load-github-csv').addEventListener('click', () => { UI.saveConfig(); location.reload(); });
 
         const openGuide = () => toggleModal('github-guide-modal', true);
         const closeGuide = () => toggleModal('github-guide-modal', false);
@@ -189,7 +180,7 @@ window.leitnerApp = window.leitnerApp || {};
 window.leitnerApp.ui = window.leitnerApp.ui || {};
 window.leitnerApp.ui.populateCSVSelector = UI.populateCSVSelector;
 
-// --- 3. SESSION MANAGER ---
+// --- 3. GESTION DE SESSION ---
 
 const SessionManager = {
     start: (deckName, cards) => {
@@ -221,9 +212,10 @@ const SessionManager = {
         SessionManager.save();
     },
 
-    // Appelé quand on quitte manuellement
     pauseAndExit: () => {
         CoreApp.closeFlashcard();
+        // Feedback
+        alert("Session sauvegardée ! Vous pourrez la reprendre depuis l'onglet Statistiques.");
     },
 
     complete: () => {
@@ -256,7 +248,7 @@ const SessionManager = {
     }
 };
 
-// --- 4. STATS UI ---
+// --- 4. STATISTIQUES ---
 
 const StatsUI = {
     init: () => {
@@ -266,18 +258,21 @@ const StatsUI = {
         document.getElementById('btn-resume-session')?.addEventListener('click', () => {
             const pending = SessionManager.loadPending();
             if (pending) {
-                alert("Assurez-vous que le fichier CSV correspondant est chargé, puis validez.");
-                document.getElementById('tab-review-trigger').click();
-                APP_STATE.isResuming = true;
-                APP_STATE.session = pending;
-                if (CoreApp.csvData.length > 0 && CoreApp.csvData.filename === pending.deckName) {
-                     CoreApp.startReview();
+                // On essaie de reprendre intelligemment
+                if(CoreApp.csvData.length === 0 || CoreApp.csvData.filename !== pending.deckName) {
+                    alert(`Veuillez d'abord charger le fichier "${pending.deckName}" dans l'onglet Révision.`);
+                    document.getElementById('tab-review-trigger').click();
+                } else {
+                    document.getElementById('tab-review-trigger').click();
+                    APP_STATE.isResuming = true;
+                    APP_STATE.session = pending;
+                    CoreApp.startReview();
                 }
             }
         });
 
         document.getElementById('btn-discard-session')?.addEventListener('click', () => {
-            if(confirm('Abandonner la session ?')) SessionManager.discard();
+            if(confirm('Abandonner la session en cours ?')) SessionManager.discard();
         });
 
         document.getElementById('btn-clear-history')?.addEventListener('click', () => {
@@ -328,7 +323,7 @@ const StatsUI = {
     }
 };
 
-// --- 5. CORE APPLICATION ---
+// --- 5. COEUR DE L'APPLICATION ---
 
 const CoreApp = {
     csvData: [],
@@ -369,6 +364,7 @@ const CoreApp = {
                 status.textContent = `${CoreApp.csvData.length} cartes chargées.`;
                 status.className = "mt-2 w-full text-sm text-green-600";
                 
+                // Reprise auto si session active correspondante
                 if (APP_STATE.isResuming && APP_STATE.session && APP_STATE.session.deckName === filename) {
                     CoreApp.startReview();
                 }
@@ -391,13 +387,10 @@ const CoreApp = {
             document.getElementById('cards-list-container').classList.add('hidden');
         });
         
-        // Fermeture des modales
         document.querySelectorAll('.modal .close, .flashcard-container, #admin-panel, #github-guide-modal').forEach(el => {
             el.addEventListener('click', (e) => {
-                // Si on clique sur le fond gris ou le bouton fermer
                 if(e.target === el || e.target.classList.contains('close')) {
                     if(el.id === 'flashcard-container' || el.classList.contains('flashcard-container')) {
-                        // Action spécifique pour flashcard : mise à jour UI
                         CoreApp.closeFlashcard();
                     } else {
                         el.classList.add('hidden');
@@ -408,20 +401,17 @@ const CoreApp = {
         });
     },
 
-    // Nouvelle fonction pour fermer proprement et rafraîchir l'interface
     closeFlashcard: () => {
         const el = document.getElementById('flashcard-container');
         el.classList.add('hidden');
         el.setAttribute('aria-hidden', 'true');
-        // IMPORTANT: On rafraîchit les boîtes pour voir les changements immédiatement
         CoreApp.renderBoxes();
-        CoreApp.renderPreviewList(1); // On remet la liste boîte 1 à jour
+        CoreApp.renderPreviewList(1);
     },
 
     parseCSV: (text) => {
         const lines = text.split(/\r?\n/).filter(l => l.trim());
         if (lines.length === 0) return [];
-
         return lines.slice(1).map((line, index) => {
             const matches = [];
             const regex = /(?:^|,)(?:"([^"]*)"|([^",]*))/g;
@@ -432,12 +422,12 @@ const CoreApp = {
                 matches.push(val);
             }
             return {
-                id: index, // ID stable basé sur la ligne
+                id: index,
                 question: matches[0] || 'Question vide',
                 qImage: matches[1] || '',
                 answer: matches[2] || 'Réponse vide',
                 aImage: matches[3] || '',
-                box: parseInt(matches[4]) || 1,
+                box: parseInt(matches[4]) || 1, // Force le nombre
                 lastReview: matches[5] || ''
             };
         });
@@ -472,6 +462,7 @@ const CoreApp = {
 
     renderBoxes: () => {
         const container = document.getElementById('leitner-boxes');
+        if(!container) return;
         container.innerHTML = '';
         [1, 2, 3, 4, 5].forEach(num => {
             const cards = CoreApp.csvData.filter(c => c.box === num);
@@ -486,7 +477,7 @@ const CoreApp = {
             div.innerHTML = `
                 <div>
                     <h3 class="font-bold text-gray-700 text-box${num}">Boîte ${num}</h3>
-                    <p class="text-3xl font-bold mt-2 text-gray-800">${count}</p>
+                    <p class="text-3xl font-bold mt-2 text-gray-800 transition-all duration-300" id="box-count-${num}">${count}</p>
                     <p class="text-xs text-gray-500 uppercase tracking-wide mb-3">cartes</p>
                 </div>
                 <div class="mt-2 border-t pt-2">${reviewHtml}</div>
@@ -562,16 +553,15 @@ const CoreApp = {
         document.getElementById('answer-section').classList.add('hidden');
         document.getElementById('show-answer-btn').classList.remove('hidden');
 
-        // Injection du bouton Quitter en haut
+        // Injection du bouton Quitter
         const qSection = document.querySelector('.question-section');
-        // Nettoyage des anciens boutons quitter s'il y en a
         const oldQuit = document.getElementById('temp-quit-btn');
         if(oldQuit) oldQuit.remove();
 
         const quitBtn = document.createElement('button');
         quitBtn.id = 'temp-quit-btn';
         quitBtn.textContent = "⏹ Quitter & Sauvegarder";
-        quitBtn.className = "mb-4 text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded";
+        quitBtn.className = "mb-4 text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded w-full md:w-auto";
         quitBtn.onclick = SessionManager.pauseAndExit;
         qSection.parentNode.insertBefore(quitBtn, qSection);
 
@@ -594,12 +584,39 @@ const CoreApp = {
         const card = CoreApp.csvData.find(c => c.id === cardId);
         
         if(card) {
-            // Logique Leitner
-            if(isCorrect && card.box < 5) card.box++;
-            else if(!isCorrect) card.box = 1;
+            const oldBox = parseInt(card.box) || 1;
+            let newBox = oldBox;
 
-            // FIX LEITNER : Sauvegarde immédiate du nouvel état de la boîte
-            BoxPersistence.updateBox(CoreApp.csvData.filename, cardId, card.box);
+            if(isCorrect) {
+                if(newBox < 5) newBox++;
+            } else {
+                newBox = 1;
+            }
+
+            // Mise à jour de la donnée et persistance
+            card.box = newBox;
+            BoxPersistence.updateBox(CoreApp.csvData.filename, cardId, newBox);
+            
+            // FEEDBACK VISUEL (TOAST)
+            const feedback = document.createElement('div');
+            feedback.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-6 py-4 rounded-xl font-bold text-white shadow-2xl z-[100] text-xl flex flex-col items-center gap-2 animate-bounce ${isCorrect ? 'bg-green-600' : 'bg-red-500'}`;
+            
+            let message = '';
+            if(!isCorrect) message = "👎 Retour Boîte 1";
+            else if(oldBox === 5) message = "🎉 Maîtrise Max !";
+            else message = `👍 Boîte ${oldBox} ➔ Boîte ${newBox}`;
+            
+            feedback.innerHTML = `<span>${message}</span>`;
+            document.body.appendChild(feedback);
+            
+            // Disparaît après 1 seconde
+            setTimeout(() => {
+                feedback.style.opacity = '0';
+                setTimeout(() => feedback.remove(), 300);
+            }, 800);
+
+            // Mise à jour des compteurs en arrière-plan pour que ce soit visible en quittant
+            CoreApp.renderBoxes();
         }
         
         SessionManager.recordResult(isCorrect);
