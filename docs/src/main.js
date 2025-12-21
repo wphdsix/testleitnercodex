@@ -1,37 +1,58 @@
 /**
  * LEITNER SYSTEM - MAIN LOGIC
- * Version: 2.3 (Aperçu Boîte 1 & Dates de révision)
+ * Version: 3.0 (Persistence des boîtes & Bouton Quitter)
  */
 
-// --- CONFIGURATION & CONSTANTES ---
+// --- CONSTANTES ---
 const STORAGE_KEYS = {
     SESSION: 'leitner_active_session',
     HISTORY: 'leitner_session_history',
-    CONFIG: 'leitner_config'
+    CONFIG: 'leitner_config',
+    BOX_STATE: 'leitner_box_state' // Nouveau : Sauvegarde l'état des boîtes
 };
 
-// Intervalles par défaut (en jours) pour le calcul des dates
-const BOX_INTERVALS = {
-    1: 1,
-    2: 3,
-    3: 7,
-    4: 14,
-    5: 30
-};
+// Intervalles (jours)
+const BOX_INTERVALS = { 1: 1, 2: 3, 3: 7, 4: 14, 5: 30 };
 
 const APP_STATE = {
     currentDeck: [],
     session: null,
     isResuming: false,
-    config: {
-        owner: 'leitexper1',
-        repo: 'testleitnercodex',
-        branch: 'main',
-        path: 'docs/'
+    config: { owner: 'leitexper1', repo: 'testleitnercodex', branch: 'main', path: 'docs/' }
+};
+
+// --- 1. GESTION DE LA PERSISTANCE (LEITNER FIX) ---
+
+const BoxPersistence = {
+    // Récupère l'état sauvegardé pour un fichier donné
+    getStoredBoxes: (filename) => {
+        const allStates = JSON.parse(localStorage.getItem(STORAGE_KEYS.BOX_STATE) || '{}');
+        return allStates[filename] || {};
+    },
+
+    // Sauvegarde la nouvelle boîte d'une carte
+    updateBox: (filename, cardId, newBox) => {
+        const allStates = JSON.parse(localStorage.getItem(STORAGE_KEYS.BOX_STATE) || '{}');
+        if (!allStates[filename]) allStates[filename] = {};
+        
+        allStates[filename][cardId] = newBox;
+        localStorage.setItem(STORAGE_KEYS.BOX_STATE, JSON.stringify(allStates));
+    },
+
+    // Applique les boîtes sauvegardées aux données CSV brutes
+    applyState: (filename, csvData) => {
+        const stored = BoxPersistence.getStoredBoxes(filename);
+        csvData.forEach(card => {
+            // Si une boîte est sauvegardée localement, on l'utilise
+            if (stored[card.id]) {
+                card.box = stored[card.id];
+            }
+        });
+        return csvData;
     }
 };
 
-// --- 1. GESTION DE L'UI & ADMIN ---
+// --- 2. UI & ADMIN ---
 
 const UI = {
     init: () => {
@@ -42,9 +63,7 @@ const UI = {
 
     loadConfig: () => {
         const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
-        if (saved) {
-            APP_STATE.config = { ...APP_STATE.config, ...JSON.parse(saved) };
-        }
+        if (saved) APP_STATE.config = { ...APP_STATE.config, ...JSON.parse(saved) };
         const safeVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val || ''; };
         safeVal('repo-owner', APP_STATE.config.owner);
         safeVal('repo-name', APP_STATE.config.repo);
@@ -82,16 +101,14 @@ const UI = {
 
         document.getElementById('admin-button').addEventListener('click', () => toggleModal('admin-panel', true));
         document.getElementById('close-admin').addEventListener('click', () => toggleModal('admin-panel', false));
-
+        
         document.getElementById('load-github-csv').addEventListener('click', () => {
             UI.saveConfig();
             location.reload();
         });
 
-        // Guide Débutant / GitHub
         const openGuide = () => toggleModal('github-guide-modal', true);
         const closeGuide = () => toggleModal('github-guide-modal', false);
-
         document.getElementById('beginner-guide-btn')?.addEventListener('click', openGuide);
         document.getElementById('open-github-guide')?.addEventListener('click', openGuide);
         document.getElementById('close-github-guide')?.addEventListener('click', closeGuide);
@@ -104,21 +121,17 @@ const UI = {
     setupTabListeners: () => {
         document.querySelectorAll('.tab-button').forEach(btn => {
             if(btn.dataset.action === 'open-import-export') return;
-            
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
                 document.querySelectorAll('.tab-button').forEach(b => {
                     b.classList.remove('tab-button-active', 'bg-blue-600', 'text-white');
                     b.classList.add('bg-gray-200', 'text-gray-700');
                 });
-                
                 const targetId = btn.dataset.tabTarget;
                 const panel = document.querySelector(`[data-tab-panel="${targetId}"]`);
                 if(panel) panel.classList.remove('hidden');
-                
                 btn.classList.add('tab-button-active', 'bg-blue-600', 'text-white');
                 btn.classList.remove('bg-gray-200', 'text-gray-700');
-
                 if (targetId === 'stats') StatsUI.init();
             });
         });
@@ -129,7 +142,6 @@ const UI = {
     populateCSVSelector: function(files, options = {}) {
         const select = document.getElementById('csv-selector');
         if (!select) return;
-
         select.innerHTML = '<option value="">-- Choisir un paquet --</option>';
         files.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
 
@@ -164,7 +176,6 @@ const UI = {
             items.forEach(item => addOption(optgroup, item));
             select.appendChild(optgroup);
         }
-
         if (orphans.length > 0) {
             const optgroup = document.createElement('optgroup');
             optgroup.label = "Autres";
@@ -178,8 +189,7 @@ window.leitnerApp = window.leitnerApp || {};
 window.leitnerApp.ui = window.leitnerApp.ui || {};
 window.leitnerApp.ui.populateCSVSelector = UI.populateCSVSelector;
 
-
-// --- 2. GESTION DE SESSION ---
+// --- 3. SESSION MANAGER ---
 
 const SessionManager = {
     start: (deckName, cards) => {
@@ -209,6 +219,11 @@ const SessionManager = {
         else APP_STATE.session.stats.wrong++;
         APP_STATE.session.currentIndex++;
         SessionManager.save();
+    },
+
+    // Appelé quand on quitte manuellement
+    pauseAndExit: () => {
+        CoreApp.closeFlashcard();
     },
 
     complete: () => {
@@ -241,7 +256,7 @@ const SessionManager = {
     }
 };
 
-// --- 3. UI STATISTIQUES ---
+// --- 4. STATS UI ---
 
 const StatsUI = {
     init: () => {
@@ -313,7 +328,7 @@ const StatsUI = {
     }
 };
 
-// --- 4. COEUR DE L'APP ---
+// --- 5. CORE APPLICATION ---
 
 const CoreApp = {
     csvData: [],
@@ -325,7 +340,6 @@ const CoreApp = {
         selector.addEventListener('change', async (e) => {
             const url = e.target.value;
             if(!url) return;
-            
             const selectedOption = e.target.options[e.target.selectedIndex];
             const filename = selectedOption.dataset.name || selectedOption.value || "unknown.csv";
 
@@ -339,13 +353,17 @@ const CoreApp = {
                 if(!response.ok) throw new Error("Fichier introuvable");
                 
                 const text = await response.text();
-                CoreApp.csvData = CoreApp.parseCSV(text);
+                // 1. Parsing
+                let data = CoreApp.parseCSV(text);
+                
+                // 2. Application de la persistance locale (Leitner Fix)
+                data = BoxPersistence.applyState(filename, data);
+                
+                CoreApp.csvData = data;
                 CoreApp.csvData.filename = filename;
 
-                // 1. Mise à jour des boîtes (compteurs + dates)
+                // 3. Rendu
                 CoreApp.renderBoxes();
-                
-                // 2. Affichage automatique de l'aperçu de la Boîte 1
                 CoreApp.renderPreviewList(1); 
 
                 status.textContent = `${CoreApp.csvData.length} cartes chargées.`;
@@ -373,23 +391,31 @@ const CoreApp = {
             document.getElementById('cards-list-container').classList.add('hidden');
         });
         
+        // Fermeture des modales
         document.querySelectorAll('.modal .close, .flashcard-container, #admin-panel, #github-guide-modal').forEach(el => {
             el.addEventListener('click', (e) => {
+                // Si on clique sur le fond gris ou le bouton fermer
                 if(e.target === el || e.target.classList.contains('close')) {
-                    el.classList.add('hidden');
-                    el.setAttribute('aria-hidden', 'true');
-                    
-                    document.getElementById('flashcard-container').classList.add('hidden');
-                    document.getElementById('flashcard-container').setAttribute('aria-hidden', 'true');
-                    
-                    document.getElementById('admin-panel').classList.add('hidden');
-                    document.getElementById('admin-panel').setAttribute('aria-hidden', 'true');
-                    
-                    document.getElementById('github-guide-modal').classList.add('hidden');
-                    document.getElementById('github-guide-modal').setAttribute('aria-hidden', 'true');
+                    if(el.id === 'flashcard-container' || el.classList.contains('flashcard-container')) {
+                        // Action spécifique pour flashcard : mise à jour UI
+                        CoreApp.closeFlashcard();
+                    } else {
+                        el.classList.add('hidden');
+                        el.setAttribute('aria-hidden', 'true');
+                    }
                 }
             });
         });
+    },
+
+    // Nouvelle fonction pour fermer proprement et rafraîchir l'interface
+    closeFlashcard: () => {
+        const el = document.getElementById('flashcard-container');
+        el.classList.add('hidden');
+        el.setAttribute('aria-hidden', 'true');
+        // IMPORTANT: On rafraîchit les boîtes pour voir les changements immédiatement
+        CoreApp.renderBoxes();
+        CoreApp.renderPreviewList(1); // On remet la liste boîte 1 à jour
     },
 
     parseCSV: (text) => {
@@ -405,9 +431,8 @@ const CoreApp = {
                 val = val ? val.trim() : '';
                 matches.push(val);
             }
-            
             return {
-                id: index,
+                id: index, // ID stable basé sur la ligne
                 question: matches[0] || 'Question vide',
                 qImage: matches[1] || '',
                 answer: matches[2] || 'Réponse vide',
@@ -418,38 +443,28 @@ const CoreApp = {
         });
     },
 
-    // Calcule la date de prochaine révision pour une boîte entière (la date la plus proche)
     getNextReviewDateForBox: (boxNum, cards) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         let earliestDate = null;
         let pendingCount = 0;
-
         const intervalDays = BOX_INTERVALS[boxNum] || 1;
 
         cards.forEach(card => {
             if (!card.lastReview) {
-                // Si jamais révisé, c'est pour aujourd'hui
                 pendingCount++;
             } else {
                 const last = new Date(card.lastReview);
                 if (!isNaN(last.getTime())) {
                     const next = new Date(last);
                     next.setDate(last.getDate() + intervalDays);
-                    
-                    if (next <= today) {
-                        pendingCount++;
-                    } else {
-                        if (!earliestDate || next < earliestDate) {
-                            earliestDate = next;
-                        }
+                    if (next <= today) pendingCount++;
+                    else {
+                        if (!earliestDate || next < earliestDate) earliestDate = next;
                     }
-                } else {
-                    pendingCount++; // Date invalide = à réviser
-                }
+                } else pendingCount++;
             }
         });
-
         if (pendingCount > 0) return { text: "Maintenant", count: pendingCount, urgent: true };
         if (earliestDate) return { text: earliestDate.toLocaleDateString('fr-FR'), count: 0, urgent: false };
         return { text: "Aucune", count: 0, urgent: false };
@@ -461,8 +476,6 @@ const CoreApp = {
         [1, 2, 3, 4, 5].forEach(num => {
             const cards = CoreApp.csvData.filter(c => c.box === num);
             const count = cards.length;
-            
-            // Calcul de la date de révision
             const reviewInfo = CoreApp.getNextReviewDateForBox(num, cards);
             const reviewHtml = reviewInfo.urgent 
                 ? `<span class="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded-full">À réviser (${reviewInfo.count})</span>`
@@ -476,36 +489,24 @@ const CoreApp = {
                     <p class="text-3xl font-bold mt-2 text-gray-800">${count}</p>
                     <p class="text-xs text-gray-500 uppercase tracking-wide mb-3">cartes</p>
                 </div>
-                <div class="mt-2 border-t pt-2">
-                    ${reviewHtml}
-                </div>
+                <div class="mt-2 border-t pt-2">${reviewHtml}</div>
             `;
-            
-            // Clic sur la boîte -> Lance la session Flashcard
             div.addEventListener('click', () => {
                 if(cards.length) {
                     SessionManager.start(CoreApp.csvData.filename, cards);
                     CoreApp.startReview();
-                } else {
-                    alert('Boîte vide.');
-                }
+                } else alert('Boîte vide.');
             });
             container.appendChild(div);
         });
     },
 
-    // Nouvelle fonction : Affiche la liste (aperçu) sous les boîtes
     renderPreviewList: (boxNum) => {
         const listContainer = document.getElementById('cards-list-container');
         const listBody = document.getElementById('cards-list');
-        const title = document.getElementById('cards-list-title');
-        
-        // Mettre à jour le titre
         document.getElementById('current-box-number').textContent = boxNum;
         
-        // Filtrer les cartes
         const cards = CoreApp.csvData.filter(c => c.box === boxNum);
-        
         listBody.innerHTML = '';
         
         if (cards.length === 0) {
@@ -514,38 +515,24 @@ const CoreApp = {
             cards.forEach(card => {
                 const cardEl = document.createElement('div');
                 cardEl.className = 'border rounded p-3 hover:bg-gray-50 text-sm flex gap-3';
-                
-                // Petite miniature si image
                 let imgHtml = '';
                 const imgUrl = CoreApp.buildImageUrl(card.qImage, 'q');
                 if (imgUrl) {
-                    imgHtml = `<div class="w-12 h-12 flex-shrink-0 bg-gray-200 rounded overflow-hidden">
-                        <img src="${imgUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'">
-                    </div>`;
+                    imgHtml = `<div class="w-12 h-12 flex-shrink-0 bg-gray-200 rounded overflow-hidden"><img src="${imgUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'"></div>`;
                 }
-
-                cardEl.innerHTML = `
-                    ${imgHtml}
-                    <div class="flex-1 min-w-0">
-                        <p class="font-semibold text-gray-800 truncate">${card.question}</p>
-                        <p class="text-gray-500 truncate">${card.answer}</p>
-                    </div>
-                `;
+                cardEl.innerHTML = `${imgHtml}<div class="flex-1 min-w-0"><p class="font-semibold text-gray-800 truncate">${card.question}</p><p class="text-gray-500 truncate">${card.answer}</p></div>`;
                 listBody.appendChild(cardEl);
             });
         }
-
         listContainer.classList.remove('hidden');
     },
 
     buildImageUrl: (filename, type) => {
         if (!filename) return null;
         if (filename.startsWith('http')) return filename;
-        
         const c = APP_STATE.config;
         const folder = type === 'q' ? 'images_questions' : 'images_reponses';
         const basePath = c.path.endsWith('/') ? c.path.slice(0, -1) : c.path;
-        
         return `https://raw.githubusercontent.com/${c.owner}/${c.repo}/${c.branch}/${basePath}/${folder}/${encodeURIComponent(filename)}`;
     },
 
@@ -555,18 +542,13 @@ const CoreApp = {
         if (s.currentIndex >= s.totalCards) {
             alert(`Fin de session ! Score: ${s.stats.correct}/${s.totalCards}`);
             SessionManager.complete();
-            const el = document.getElementById('flashcard-container');
-            el.classList.add('hidden');
-            el.setAttribute('aria-hidden', 'true');
+            CoreApp.closeFlashcard();
             return;
         }
-        
         const cardId = s.cardsQueue[s.currentIndex];
         const card = CoreApp.csvData.find(c => c.id === cardId);
-
-        if (card) {
-            CoreApp.showCardUI(card);
-        } else {
+        if (card) CoreApp.showCardUI(card);
+        else {
             s.currentIndex++;
             CoreApp.startReview();
         }
@@ -579,6 +561,19 @@ const CoreApp = {
         
         document.getElementById('answer-section').classList.add('hidden');
         document.getElementById('show-answer-btn').classList.remove('hidden');
+
+        // Injection du bouton Quitter en haut
+        const qSection = document.querySelector('.question-section');
+        // Nettoyage des anciens boutons quitter s'il y en a
+        const oldQuit = document.getElementById('temp-quit-btn');
+        if(oldQuit) oldQuit.remove();
+
+        const quitBtn = document.createElement('button');
+        quitBtn.id = 'temp-quit-btn';
+        quitBtn.textContent = "⏹ Quitter & Sauvegarder";
+        quitBtn.className = "mb-4 text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded";
+        quitBtn.onclick = SessionManager.pauseAndExit;
+        qSection.parentNode.insertBefore(quitBtn, qSection);
 
         let qHtml = `<p class="text-xl">${card.question || '...'}</p>`;
         const qImgUrl = CoreApp.buildImageUrl(card.qImage, 'q');
@@ -599,8 +594,12 @@ const CoreApp = {
         const card = CoreApp.csvData.find(c => c.id === cardId);
         
         if(card) {
+            // Logique Leitner
             if(isCorrect && card.box < 5) card.box++;
             else if(!isCorrect) card.box = 1;
+
+            // FIX LEITNER : Sauvegarde immédiate du nouvel état de la boîte
+            BoxPersistence.updateBox(CoreApp.csvData.filename, cardId, card.box);
         }
         
         SessionManager.recordResult(isCorrect);
