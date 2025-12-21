@@ -254,7 +254,9 @@
       select.innerHTML = '<option value="">Erreur de chargement</option>';
       return;
     } finally {
-      const hasFiles = Array.isArray(bootstrap.files) && bootstrap.files.length > 0;
+      // Correction : on récupère la variable globale définie plus haut
+      const bs = window.__leitnerCSVBootstrap; 
+      const hasFiles = bs && Array.isArray(bs.files) && bs.files.length > 0;
       select.disabled = !hasFiles;
     }
   }
