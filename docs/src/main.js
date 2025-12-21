@@ -1,6 +1,6 @@
 /**
  * LEITNER SYSTEM - MAIN LOGIC
- * Version: 3.9 (Mode Maîtrise & Cartes Cliquables)
+ * Version: 4.0 (Flow Continu & Maîtrise Totale)
  */
 
 // --- CONSTANTES ---
@@ -185,7 +185,7 @@ window.leitnerApp = window.leitnerApp || {};
 window.leitnerApp.ui = window.leitnerApp.ui || {};
 window.leitnerApp.ui.populateCSVSelector = UI.populateCSVSelector;
 
-// --- 3. GESTION DE SESSIONS (Mode Maîtrise) ---
+// --- 3. GESTION DE SESSIONS (Mode Maîtrise & Continu) ---
 
 const SessionManager = {
     getAll: () => {
@@ -196,10 +196,10 @@ const SessionManager = {
         const newSession = {
             id: Date.now(),
             deckName: deckName,
-            // On sauvegarde l'ensemble des cartes de la session pour vérifier la maîtrise (Box 5)
+            // Pour la maîtrise, on traque l'ensemble des IDs originaux de la session
             originalDeckIds: cards.map(c => c.id), 
             cardsQueue: cards.map((c) => c.id),
-            totalCards: cards.length, // Taille de la file actuelle
+            totalCards: cards.length,
             currentIndex: 0,
             stats: { correct: 0, wrong: 0 },
             startTime: new Date().toISOString(),
@@ -222,20 +222,20 @@ const SessionManager = {
         const s = APP_STATE.session;
         s.lastUpdate = new Date().toISOString();
         
-        // --- LOGIQUE MAÎTRISE ---
-        // Une session n'est terminée QUE si toutes les cartes d'origine sont en boîte 5
-        // Pour cela, on doit vérifier l'état actuel des cartes dans CoreApp.csvData
+        // --- LOGIQUE MAÎTRISE ABSOLUE ---
+        // La session est terminée SEULEMENT si toutes les cartes sont en Boîte 5
         
-        // 1. On récupère toutes les cartes de la session
+        // 1. Récupérer l'état actuel de toutes les cartes de la session
         const allCardsInSession = CoreApp.csvData.filter(c => s.originalDeckIds && s.originalDeckIds.includes(c.id));
         
-        // 2. Sont-elles toutes en boîte 5 ?
+        // 2. Vérifier si elles sont toutes en boîte 5
         const allMastered = allCardsInSession.length > 0 && allCardsInSession.every(c => c.box === 5);
 
         if (allMastered) {
             s.status = 'completed';
         } else {
-            s.status = 'active'; // Reste active tant que tout n'est pas maîtrisé
+            // Même si la file d'attente est vide, la session reste active tant que mastery non atteint
+            s.status = 'active'; 
         }
 
         const sessions = SessionManager.getAll();
@@ -266,30 +266,29 @@ const SessionManager = {
             APP_STATE.session = sessionToResume;
             APP_STATE.isResuming = true;
 
-            // Vérifier fichier chargé
+            // Fichier chargé ?
             if (CoreApp.csvData.length > 0 && CoreApp.csvData.filename === sessionToResume.deckName) {
-                // --- LOGIQUE DE RECHARGE DE LA FILE ---
-                // Si on a fini la file actuelle (currentIndex >= totalCards) mais que la session est encore "active" (pas tout maîtrisé)
-                // Alors on doit recharger la file avec les cartes non-maîtrisées (< Box 5)
+                // --- BOUCLE D'APPRENTISSAGE ---
+                // Si la file est épuisée mais que le statut est toujours "active" (pas tout maîtrisé)
+                // On recharge automatiquement les cartes qui ne sont pas en boîte 5
                 if (sessionToResume.currentIndex >= sessionToResume.totalCards && sessionToResume.status === 'active') {
                     
-                    // Trouver les cartes non maîtrisées parmi celles d'origine
                     const remainingCards = CoreApp.csvData.filter(c => 
                         sessionToResume.originalDeckIds.includes(c.id) && c.box < 5
                     );
 
                     if (remainingCards.length > 0) {
-                        alert(`Cycle terminé ! Rechargement de ${remainingCards.length} cartes non maîtrisées (Boîte < 5).`);
-                        // On réinitialise la file pour un nouveau tour
+                        alert(`Nouveau tour ! Rechargement de ${remainingCards.length} cartes non maîtrisées (Boîte < 5).`);
+                        // Reset de la file avec les cartes restantes
                         sessionToResume.cardsQueue = remainingCards.map(c => c.id);
                         sessionToResume.totalCards = remainingCards.length;
                         sessionToResume.currentIndex = 0;
-                        SessionManager.updateCurrent(); // Sauvegarde le nouvel état
+                        SessionManager.updateCurrent();
                     } else {
-                        // Cas rare : tout est maîtrisé mais le statut n'était pas à jour
+                        // Maîtrise atteinte (cas de bord)
                         sessionToResume.status = 'completed';
                         SessionManager.updateCurrent();
-                        alert("Félicitations ! Toutes les cartes sont maîtrisées (Boîte 5).");
+                        alert("Félicitations ! Toutes les cartes de cette session sont maîtrisées.");
                         return;
                     }
                 }
@@ -318,7 +317,7 @@ const SessionManager = {
     deleteAll: () => {
         localStorage.removeItem(STORAGE_KEYS.ALL_SESSIONS);
         localStorage.removeItem(STORAGE_KEYS.CARD_STATE);
-        alert("Tout effacé. Redémarrage...");
+        alert("Reset complet effectué. Redémarrage...");
         location.reload();
     }
 };
@@ -331,7 +330,7 @@ const StatsUI = {
         StatsUI.renderDifficultyStats();
         
         document.getElementById('btn-clear-history')?.addEventListener('click', () => {
-            if(confirm('TOUT effacer (sessions et avancement des boîtes) ?')) SessionManager.deleteAll();
+            if(confirm('Tout effacer (Historique + État des boîtes) ?')) SessionManager.deleteAll();
         });
         
         const historyList = document.getElementById('stats-history-list');
@@ -348,7 +347,6 @@ const StatsUI = {
                 if (!li) return;
 
                 const id = li.dataset.id;
-                // On peut toujours reprendre tant que c'est dans la liste
                 SessionManager.resumeById(id);
             });
         }
@@ -396,29 +394,30 @@ const StatsUI = {
             const dateStr = dateObj.toLocaleDateString('fr-FR', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'});
             
             if (s.status === 'completed') {
-                totalCards += s.totalCards; // Approximation pour stats
+                totalCards += s.totalCards;
                 totalCorrect += s.stats.correct;
                 finishedCount++;
             }
 
-            // Statut Maîtrise
             let statusBadge = '';
             let borderColor = 'border-blue-500';
             let bgClass = 'bg-white';
+            let statusText = 'EN COURS';
             
             if (s.status === 'completed') {
+                statusText = 'MAÎTRISÉ';
                 statusBadge = '<span class="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded">MAÎTRISÉ</span>';
                 borderColor = 'border-green-500';
-                bgClass = 'bg-green-50'; // Légèrement vert pour dire bravo
+                bgClass = 'bg-green-50';
             } else {
                 statusBadge = '<span class="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded">EN COURS</span>';
             }
 
             const remaining = s.totalCards - s.currentIndex;
-            const progressInfo = remaining <= 0 ? "Cycle fini (cliquer pour continuer)" : `${remaining} à voir ce tour`;
+            const progressInfo = remaining <= 0 ? "Fin de cycle (Cliquer pour continuer)" : `${remaining} à voir`;
 
             html += `
-            <li data-id="${s.id}" data-status="${s.status}" class="cursor-pointer hover:bg-gray-50 transition p-3 ${bgClass} rounded border-l-4 ${borderColor} mb-2 shadow-sm group relative" title="Cliquer pour reprendre ou revoir">
+            <li data-id="${s.id}" data-status="${s.status}" class="cursor-pointer hover:bg-gray-50 transition p-3 ${bgClass} rounded border-l-4 ${borderColor} mb-2 shadow-sm group relative" title="Cliquer pour reprendre">
                 <button class="delete-session-btn absolute top-2 right-2 text-gray-400 hover:text-red-500 hidden group-hover:block px-2 text-lg" data-id="${s.id}" title="Supprimer">✕</button>
                 <div class="flex justify-between items-center pr-8">
                     <div>
@@ -426,11 +425,11 @@ const StatsUI = {
                             <strong class="text-gray-800 text-sm">${s.deckName}</strong>
                             ${statusBadge}
                         </div>
-                        <span class="text-xs text-gray-500 block">Dernière activité : ${dateStr}</span>
+                        <span class="text-xs text-gray-500 block">Activité : ${dateStr}</span>
                     </div>
                     <div class="text-right">
                         <span class="block font-bold text-gray-700 text-sm">${progressInfo}</span>
-                        <span class="text-xs text-gray-400">Score tour: ${s.stats.correct}/${s.totalCards}</span>
+                        <span class="text-xs text-gray-400">Score: ${s.stats.correct}/${s.totalCards}</span>
                     </div>
                 </div>
             </li>`;
@@ -487,9 +486,9 @@ const CoreApp = {
 
                 if (APP_STATE.isResuming && APP_STATE.session && APP_STATE.session.deckName === filename) {
                     APP_STATE.isResuming = false;
-                    // On vérifie si on doit régénérer la file avant de lancer
+                    // Vérification de reload nécessaire au chargement
                     if (APP_STATE.session.currentIndex >= APP_STATE.session.totalCards && APP_STATE.session.status === 'active') {
-                         SessionManager.resumeById(APP_STATE.session.id); // Déclenche la logique de reload
+                         SessionManager.resumeById(APP_STATE.session.id);
                     } else {
                          CoreApp.startReview();
                     }
@@ -621,7 +620,7 @@ const CoreApp = {
         });
     },
 
-    // --- NOUVEAU : RENDU CLICABLE ---
+    // --- MISE À JOUR : CLIC = DÉBUT DE SESSION CONTINUE ---
     renderDeckOverview: () => {
         const container = document.getElementById('deck-overview-container');
         if(!container) return;
@@ -645,13 +644,18 @@ const CoreApp = {
                 
                 cards.forEach(card => {
                     const cardEl = document.createElement('div');
-                    // Ajout cursor-pointer et hover effect
                     cardEl.className = 'border rounded p-3 hover:bg-blue-50 text-sm flex gap-3 cursor-pointer transition transform hover:-translate-y-1 hover:shadow-md';
                     
-                    // Ajout du CLICK EVENT
+                    // --- NOUVEAU LOGIQUE DE CLIC ---
                     cardEl.onclick = () => {
-                        // Lancement session unique
-                        SessionManager.start(CoreApp.csvData.filename, [card]);
+                        // 1. On récupère TOUTES les cartes de la boîte
+                        const boxCards = CoreApp.csvData.filter(c => c.box === boxNum);
+                        // 2. On met la carte cliquée en PREMIER
+                        const otherCards = boxCards.filter(c => c.id !== card.id);
+                        const sessionCards = [card, ...otherCards];
+                        
+                        // 3. On lance une session complète avec cet ordre
+                        SessionManager.start(CoreApp.csvData.filename, sessionCards);
                         CoreApp.startReview();
                     };
                     
@@ -698,7 +702,14 @@ const CoreApp = {
         const s = APP_STATE.session;
         if (s.currentIndex >= s.totalCards) {
             SessionManager.updateCurrent(); // Update pour voir si mastery atteinte
-            alert(`Session terminée !\nScore : ${s.stats.correct}/${s.totalCards}\n\nConsultez l'historique pour reprendre les cartes non maîtrisées.`);
+            
+            // Message personnalisé
+            const allDone = s.status === 'completed';
+            const msg = allDone 
+                ? "Session MAÎTRISÉE !\nToutes les cartes sont en Boîte 5." 
+                : `Cycle terminé (${s.stats.correct}/${s.totalCards}).\nCertaines cartes ne sont pas encore en Boîte 5.\nConsultez l'historique pour lancer le tour suivant.`;
+            
+            alert(msg);
             CoreApp.closeFlashcard();
             return;
         }
