@@ -8,6 +8,12 @@
     <link rel="icon" type="image/png" href="mordor-2340048_1280.png">
     
     <script>
+      // Fonction utilitaire pour éviter le cache navigateur et CDN
+      function getNoCacheUrl(url) {
+          const separator = url.includes('?') ? '&' : '?';
+          return `${url}${separator}t=${Date.now()}`;
+      }
+
       async function fetchCsvFilesFromGitHub() {
         const owner = 'leitexper1';
         const repo = 'testleitnercodex';
@@ -15,8 +21,11 @@
         const folderPath = 'docs';
         const folderPrefix = folderPath.endsWith('/') ? folderPath : `${folderPath}/`;
     
-        const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
-        const response = await fetch(treeUrl);
+        // Ajout du paramètre timestamp pour éviter le cache GitHub API
+        const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1&t=${Date.now()}`;
+        
+        // Option 'no-store' pour forcer le navigateur à ne pas utiliser son cache
+        const response = await fetch(treeUrl, { cache: 'no-store' });
     
         if (!response.ok) {
           throw new Error(`Erreur API GitHub : ${response.status}`);
@@ -53,7 +62,8 @@
     
         for (const manifestName of manifestCandidates) {
           try {
-            const response = await fetch(manifestName, { cache: 'no-store' });
+            // Timestamp anti-cache pour le fichier json local
+            const response = await fetch(`${manifestName}?t=${Date.now()}`, { cache: 'no-store' });
             if (!response.ok) {
               continue;
             }
@@ -148,11 +158,12 @@
           || files[0]?.name
           || '';
     
+        // Utilisation de la fonction du main.js si disponible pour l'affichage groupé
         if (window.leitnerApp?.ui?.populateCSVSelector) {
           window.leitnerApp.ui.populateCSVSelector(files, { selectedName: selectedName || null });
         } else {
+          // Fallback simple
           select.innerHTML = '';
-    
           if (!files.length) {
             const emptyOption = document.createElement('option');
             emptyOption.value = '';
@@ -168,18 +179,17 @@
               option.dataset.name = name;
               
               if (file.download_url) {
-                option.dataset.downloadUrl = file.download_url;
+                // Important : on ajoute aussi le cache-buster à l'URL de téléchargement du fichier
+                option.dataset.downloadUrl = getNoCacheUrl(file.download_url);
               }
-    
               if (file.publicPath) {
                 option.dataset.publicPath = file.publicPath;
               }
-    
               option.dataset.source = file.source || source || '';
+              
               if (name === selectedName) {
                 option.selected = true;
               }
-    
               select.appendChild(option);
             });
           }
@@ -213,7 +223,7 @@
         }
     
         select.disabled = true;
-        select.innerHTML = '<option value="">Recherche des fichiers…</option>';
+        select.innerHTML = '<option value="">Recherche des fichiers...</option>';
     
         try {
           let githubFiles = [];
@@ -258,58 +268,12 @@
         }
       }
     
-      async function checkForLocalCsvUpdates() {
-        const select = document.getElementById('csv-selector');
-        if (!select) {
-          return;
-        }
-    
-        try {
-          const localFiles = await fetchCsvFilesFromManifest();
-          if (!localFiles.length) {
-            return;
-          }
-    
-          const bootstrap = window.__leitnerCSVBootstrap || {};
-          const currentFiles = Array.isArray(bootstrap.files) ? bootstrap.files : [];
-          const remoteFiles = currentFiles.filter(file => file.source && file.source !== 'manifest');
-          const combined = mergeCsvFileLists(remoteFiles, localFiles);
-    
-          if (!areCsvListsDifferent(combined, currentFiles)) {
-            return;
-          }
-    
-          const beforeValue = select.value || bootstrap.selectedName || null;
-          const source = remoteFiles.length ? 'mixed' : 'manifest';
-    
-          populateCsvSelect(select, combined, { preferredName: beforeValue, source });
-    
-          if (!beforeValue && select.value) {
-            select.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-    
-          const hasFiles = Array.isArray(bootstrap.files) && bootstrap.files.length > 0;
-          select.disabled = !hasFiles;
-        } catch (error) {
-          console.warn('Surveillance des fichiers CSV locaux échouée', error);
-        }
-      }
-    
-      function startCsvWatcher(intervalMs = 8000) {
-        if (window.__leitnerCSVWatcherId) {
-          window.clearInterval(window.__leitnerCSVWatcherId);
-        }
-    
-        window.__leitnerCSVWatcherId = window.setInterval(checkForLocalCsvUpdates, intervalMs);
-        checkForLocalCsvUpdates();
-      }
-    
+      // Désactivation du watcher automatique qui pourrait créer des conflits de cache
+      // On préfère un chargement explicite au démarrage
+      
       document.addEventListener('DOMContentLoaded', () => {
         loadCsvFiles({ preserveSelection: false })
-          .catch(error => console.error('Chargement initial des CSV échoué', error))
-          .finally(() => {
-            startCsvWatcher();
-          });
+          .catch(error => console.error('Chargement initial des CSV échoué', error));
       });
     
       function openImportExport() {
@@ -327,6 +291,7 @@
         window.open(url, '_blank', 'noopener,noreferrer');
       }
     </script>
+
 <body class="site-background text-gray-800">
     <div class="container mx-auto max-w-6xl p-5">
         <header class="text-center mb-8">
