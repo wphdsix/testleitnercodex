@@ -1,13 +1,13 @@
 /**
  * LEITNER SYSTEM - MAIN LOGIC
- * Version: 2.1 (Correctif Images & Admin)
+ * Version: 2.2 (Correctif ARIA & CSV Parser)
  */
 
 // --- CONFIGURATION & CONSTANTES ---
 const STORAGE_KEYS = {
     SESSION: 'leitner_active_session',
     HISTORY: 'leitner_session_history',
-    CONFIG: 'leitner_config' // Pour stocker user/repo/branch
+    CONFIG: 'leitner_config'
 };
 
 const APP_STATE = {
@@ -15,7 +15,7 @@ const APP_STATE = {
     session: null,
     isResuming: false,
     config: {
-        owner: 'leitexper1', // Valeur par défaut
+        owner: 'leitexper1',
         repo: 'testleitnercodex',
         branch: 'main',
         path: 'docs/'
@@ -36,51 +36,57 @@ const UI = {
         if (saved) {
             APP_STATE.config = { ...APP_STATE.config, ...JSON.parse(saved) };
         }
-        // Remplir les champs du panel admin
-        document.getElementById('repo-owner').value = APP_STATE.config.owner || '';
-        document.getElementById('repo-name').value = APP_STATE.config.repo || '';
-        document.getElementById('repo-branch').value = APP_STATE.config.branch || '';
-        document.getElementById('repo-path').value = APP_STATE.config.path || '';
+        const safeVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val || ''; };
+        safeVal('repo-owner', APP_STATE.config.owner);
+        safeVal('repo-name', APP_STATE.config.repo);
+        safeVal('repo-branch', APP_STATE.config.branch);
+        safeVal('repo-path', APP_STATE.config.path);
     },
 
     saveConfig: () => {
+        const val = (id) => document.getElementById(id).value.trim();
         const newConfig = {
-            owner: document.getElementById('repo-owner').value.trim(),
-            repo: document.getElementById('repo-name').value.trim(),
-            branch: document.getElementById('repo-branch').value.trim() || 'main',
-            path: document.getElementById('repo-path').value.trim() || ''
+            owner: val('repo-owner'),
+            repo: val('repo-name'),
+            branch: val('repo-branch') || 'main',
+            path: val('repo-path') || ''
         };
         APP_STATE.config = newConfig;
         localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(newConfig));
         alert('Configuration sauvegardée !');
         document.getElementById('admin-panel').classList.add('hidden');
+        document.getElementById('admin-panel').setAttribute('aria-hidden', 'true');
     },
 
     setupAdminListeners: () => {
-        // Ouvrir/Fermer Admin
-        document.getElementById('admin-button').addEventListener('click', () => {
-            document.getElementById('admin-panel').classList.remove('hidden');
-        });
-        document.getElementById('close-admin').addEventListener('click', () => {
-            document.getElementById('admin-panel').classList.add('hidden');
-        });
+        const toggleModal = (id, show) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (show) {
+                el.classList.remove('hidden');
+                el.setAttribute('aria-hidden', 'false');
+            } else {
+                el.classList.add('hidden');
+                el.setAttribute('aria-hidden', 'true');
+            }
+        };
 
-        // Sauvegarder Config GitHub
+        document.getElementById('admin-button').addEventListener('click', () => toggleModal('admin-panel', true));
+        document.getElementById('close-admin').addEventListener('click', () => toggleModal('admin-panel', false));
+
         document.getElementById('load-github-csv').addEventListener('click', () => {
             UI.saveConfig();
-            location.reload(); // Recharger pour prendre en compte les nouveaux params
+            location.reload();
         });
 
         // Guide Débutant / GitHub
-        const guideModal = document.getElementById('github-guide-modal');
-        const openGuide = () => guideModal.classList.remove('hidden');
-        const closeGuide = () => guideModal.classList.add('hidden');
+        const openGuide = () => toggleModal('github-guide-modal', true);
+        const closeGuide = () => toggleModal('github-guide-modal', false);
 
         document.getElementById('beginner-guide-btn')?.addEventListener('click', openGuide);
         document.getElementById('open-github-guide')?.addEventListener('click', openGuide);
         document.getElementById('close-github-guide')?.addEventListener('click', closeGuide);
         
-        // Import/Export Bouton
         document.getElementById('open-import-export')?.addEventListener('click', () => {
             if (window.openImportExport) window.openImportExport();
         });
@@ -88,7 +94,7 @@ const UI = {
 
     setupTabListeners: () => {
         document.querySelectorAll('.tab-button').forEach(btn => {
-            if(btn.dataset.action === 'open-import-export') return; // Ignorer le bouton spécial
+            if(btn.dataset.action === 'open-import-export') return;
             
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
@@ -107,12 +113,10 @@ const UI = {
                 if (targetId === 'stats') StatsUI.init();
             });
         });
-        // Activer Review par défaut
         const defaultTab = document.getElementById('tab-review-trigger');
         if(defaultTab) defaultTab.click();
     },
 
-    // Appelé par index.html pour remplir le select (Logique de groupement)
     populateCSVSelector: function(files, options = {}) {
         const select = document.getElementById('csv-selector');
         if (!select) return;
@@ -136,37 +140,31 @@ const UI = {
             }
         });
 
+        const addOption = (parent, item) => {
+            const option = document.createElement('option');
+            option.value = item.file.download_url || item.file.publicPath;
+            option.textContent = item.label;
+            option.dataset.name = item.file.name;
+            if(options.selectedName === item.file.name) option.selected = true;
+            parent.appendChild(option);
+        };
+
         for (const [category, items] of Object.entries(groups)) {
             const optgroup = document.createElement('optgroup');
             optgroup.label = category.charAt(0).toUpperCase() + category.slice(1);
-            items.forEach(item => {
-                const option = document.createElement('option');
-                option.value = item.file.download_url || item.file.publicPath;
-                option.textContent = item.label;
-                option.dataset.name = item.file.name;
-                if(options.selectedName === item.file.name) option.selected = true;
-                optgroup.appendChild(option);
-            });
+            items.forEach(item => addOption(optgroup, item));
             select.appendChild(optgroup);
         }
 
         if (orphans.length > 0) {
             const optgroup = document.createElement('optgroup');
             optgroup.label = "Autres";
-            orphans.forEach(item => {
-                const option = document.createElement('option');
-                option.value = item.file.download_url || item.file.publicPath;
-                option.textContent = item.label;
-                option.dataset.name = item.file.name;
-                if(options.selectedName === item.file.name) option.selected = true;
-                optgroup.appendChild(option);
-            });
+            orphans.forEach(item => addOption(optgroup, item));
             select.appendChild(optgroup);
         }
     }
 };
 
-// Exposer la fonction pour index.html
 window.leitnerApp = window.leitnerApp || {};
 window.leitnerApp.ui = window.leitnerApp.ui || {};
 window.leitnerApp.ui.populateCSVSelector = UI.populateCSVSelector;
@@ -180,7 +178,7 @@ const SessionManager = {
             id: Date.now(),
             deckName: deckName,
             totalCards: cards.length,
-            cardsQueue: cards.map((c, i) => i),
+            cardsQueue: cards.map((c) => c.id), // Stocker les IDs seulement pour être sûr
             currentIndex: 0,
             stats: { correct: 0, wrong: 0, startTime: Date.now() }
         };
@@ -248,7 +246,10 @@ const StatsUI = {
                 document.getElementById('tab-review-trigger').click();
                 APP_STATE.isResuming = true;
                 APP_STATE.session = pending;
-                CoreApp.startReview(true);
+                // On attend que l'utilisateur charge le CSV, ou s'il est déjà là :
+                if (CoreApp.csvData.length > 0 && CoreApp.csvData.filename === pending.deckName) {
+                     CoreApp.startReview();
+                }
             }
         });
 
@@ -312,13 +313,11 @@ const CoreApp = {
     init: () => {
         UI.init();
         
-        // Listener Selecteur CSV
         const selector = document.getElementById('csv-selector');
         selector.addEventListener('change', async (e) => {
             const url = e.target.value;
             if(!url) return;
             
-            // Robustesse : on cherche le nom via dataset ou value
             const selectedOption = e.target.options[e.target.selectedIndex];
             const filename = selectedOption.dataset.name || selectedOption.value || "unknown.csv";
 
@@ -326,6 +325,7 @@ const CoreApp = {
                 const status = document.getElementById('csv-load-status');
                 status.classList.remove('hidden');
                 status.textContent = "Chargement...";
+                status.className = "mt-2 w-full text-sm text-blue-600";
                 
                 const response = await fetch(url);
                 if(!response.ok) throw new Error("Fichier introuvable");
@@ -337,6 +337,12 @@ const CoreApp = {
                 CoreApp.renderBoxes();
                 status.textContent = `${CoreApp.csvData.length} cartes chargées.`;
                 status.className = "mt-2 w-full text-sm text-green-600";
+                
+                // Reprise auto si session correspondante
+                if (APP_STATE.isResuming && APP_STATE.session && APP_STATE.session.deckName === filename) {
+                    CoreApp.startReview();
+                }
+
             } catch (err) {
                 console.error(err);
                 const status = document.getElementById('csv-load-status');
@@ -345,7 +351,6 @@ const CoreApp = {
             }
         });
 
-        // Listeners Cartes
         document.getElementById('show-answer-btn').addEventListener('click', () => {
             document.getElementById('answer-section').classList.remove('hidden');
             document.getElementById('show-answer-btn').classList.add('hidden');
@@ -356,14 +361,21 @@ const CoreApp = {
             document.getElementById('cards-list-container').classList.add('hidden');
         });
         
-        // Modales
+        // Gestion générique de la fermeture des modales (CORRECTION ARIA ICI)
         document.querySelectorAll('.modal .close, .flashcard-container, #admin-panel, #github-guide-modal').forEach(el => {
             el.addEventListener('click', (e) => {
                 if(e.target === el || e.target.classList.contains('close')) {
                     el.classList.add('hidden');
+                    el.setAttribute('aria-hidden', 'true'); // IMPORTANT: Marquer comme caché
+                    
                     document.getElementById('flashcard-container').classList.add('hidden');
+                    document.getElementById('flashcard-container').setAttribute('aria-hidden', 'true');
+                    
                     document.getElementById('admin-panel').classList.add('hidden');
+                    document.getElementById('admin-panel').setAttribute('aria-hidden', 'true');
+                    
                     document.getElementById('github-guide-modal').classList.add('hidden');
+                    document.getElementById('github-guide-modal').setAttribute('aria-hidden', 'true');
                 }
             });
         });
@@ -371,24 +383,30 @@ const CoreApp = {
 
     parseCSV: (text) => {
         const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length === 0) return [];
+
         return lines.slice(1).map((line, index) => {
-            // Regex pour gérer les guillemets CSV correctement
-            const values = [];
-            let match;
+            // Regex améliorée pour CSV
+            const matches = [];
+            // Cette regex capture : "valeur entre guillemets" OU valeur sans virgule
             const regex = /(?:^|,)(?:"([^"]*)"|([^",]*))/g;
+            let match;
             while ((match = regex.exec(line)) !== null) {
-                values.push(match[1] ? match[1] : match[2]);
+                // match[1] = avec guillemets, match[2] = sans guillemets
+                let val = match[1] !== undefined ? match[1] : match[2];
+                val = val ? val.trim() : '';
+                matches.push(val);
             }
             
-            return {
-                id: index,
-                question: values[0] || '',
-                qImage: values[1] || '',
-                answer: values[2] || '',
-                aImage: values[3] || '',
-                box: parseInt(values[4]) || 1,
-                lastReview: values[5] || ''
-            };
+            // Sécurité : s'assurer qu'on a les champs minimes
+            const question = matches[0] || 'Question vide';
+            const qImage = matches[1] || '';
+            const answer = matches[2] || 'Réponse vide';
+            const aImage = matches[3] || '';
+            const box = parseInt(matches[4]) || 1;
+            const lastReview = matches[5] || '';
+
+            return { id: index, question, qImage, answer, aImage, box, lastReview };
         });
     },
 
@@ -404,7 +422,7 @@ const CoreApp = {
                 const cards = CoreApp.csvData.filter(c => c.box === num);
                 if(cards.length) {
                     SessionManager.start(CoreApp.csvData.filename, cards);
-                    CoreApp.startReview(true);
+                    CoreApp.startReview();
                 } else {
                     alert('Boîte vide.');
                 }
@@ -417,11 +435,8 @@ const CoreApp = {
         if (!filename) return null;
         if (filename.startsWith('http')) return filename;
         
-        // Construction URL GitHub
         const c = APP_STATE.config;
         const folder = type === 'q' ? 'images_questions' : 'images_reponses';
-        
-        // Nettoyage du path config (ex: "docs/" -> "docs")
         const basePath = c.path.endsWith('/') ? c.path.slice(0, -1) : c.path;
         
         return `https://raw.githubusercontent.com/${c.owner}/${c.repo}/${c.branch}/${basePath}/${folder}/${encodeURIComponent(filename)}`;
@@ -433,39 +448,61 @@ const CoreApp = {
         if (s.currentIndex >= s.totalCards) {
             alert(`Fin de session ! Score: ${s.stats.correct}/${s.totalCards}`);
             SessionManager.complete();
-            document.getElementById('flashcard-container').classList.add('hidden');
+            const el = document.getElementById('flashcard-container');
+            el.classList.add('hidden');
+            el.setAttribute('aria-hidden', 'true');
             return;
         }
-        const card = s.cardsQueue[s.currentIndex];
-        CoreApp.showCardUI(card);
+        
+        // On récupère l'ID de la carte courante dans la file d'attente
+        const cardId = s.cardsQueue[s.currentIndex];
+        // On cherche la carte complète dans les données chargées
+        const card = CoreApp.csvData.find(c => c.id === cardId);
+
+        if (card) {
+            CoreApp.showCardUI(card);
+        } else {
+            console.error("Carte introuvable pour l'ID:", cardId);
+            // Passer à la suivante si erreur
+            s.currentIndex++;
+            CoreApp.startReview();
+        }
     },
 
     showCardUI: (card) => {
         const container = document.getElementById('flashcard-container');
+        // CORRECTION ARIA : On rend le conteneur visible aux lecteurs d'écran AVANT
         container.classList.remove('hidden');
+        container.setAttribute('aria-hidden', 'false'); 
+        
         document.getElementById('answer-section').classList.add('hidden');
         document.getElementById('show-answer-btn').classList.remove('hidden');
 
         // Question
-        let qHtml = `<p class="text-xl">${card.question}</p>`;
+        let qHtml = `<p class="text-xl">${card.question || '...'}</p>`;
         const qImgUrl = CoreApp.buildImageUrl(card.qImage, 'q');
         if(qImgUrl) qHtml += `<img src="${qImgUrl}" class="max-w-full h-auto mt-4 rounded shadow-sm mx-auto max-h-60 object-contain" onerror="this.style.display='none'">`;
         document.getElementById('question-content').innerHTML = qHtml;
 
         // Réponse
-        let aHtml = `<p class="text-xl">${card.answer}</p>`;
+        let aHtml = `<p class="text-xl">${card.answer || '...'}</p>`;
         const aImgUrl = CoreApp.buildImageUrl(card.aImage, 'a');
         if(aImgUrl) aHtml += `<img src="${aImgUrl}" class="max-w-full h-auto mt-4 rounded shadow-sm mx-auto max-h-60 object-contain" onerror="this.style.display='none'">`;
         document.getElementById('answer-content').innerHTML = aHtml;
+        
+        // Donner le focus au bouton de réponse pour la navigation clavier
+        setTimeout(() => document.getElementById('show-answer-btn').focus(), 50);
     },
 
     handleAnswer: (isCorrect) => {
         const s = APP_STATE.session;
-        const card = s.cardsQueue[s.currentIndex];
+        const cardId = s.cardsQueue[s.currentIndex];
+        const card = CoreApp.csvData.find(c => c.id === cardId);
         
-        // Mise à jour visuelle uniquement (pas d'écriture CSV)
-        if(isCorrect && card.box < 5) card.box++;
-        else if(!isCorrect) card.box = 1;
+        if(card) {
+            if(isCorrect && card.box < 5) card.box++;
+            else if(!isCorrect) card.box = 1;
+        }
         
         SessionManager.recordResult(isCorrect);
         CoreApp.startReview();
