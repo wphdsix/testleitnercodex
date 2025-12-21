@@ -554,22 +554,6 @@
                 <div class="bg-white rounded-lg shadow-md p-6">
                     <h2 class="text-2xl font-bold mb-6">Tableau de bord</h2>
 
-                    <div id="resume-area" class="hidden mb-8 bg-blue-50 border-l-4 border-blue-500 p-4 rounded shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
-                        <div>
-                            <h3 class="font-bold text-blue-800 text-lg">Session interrompue détectée</h3>
-                            <p class="text-blue-700">Il vous reste <strong id="resume-count">0</strong> cartes à voir dans votre session précédente.</p>
-                            <p class="text-xs text-blue-500 mt-1" id="resume-deck-name"></p>
-                        </div>
-                        <div class="flex gap-2">
-                            <button id="btn-discard-session" class="px-4 py-2 text-red-500 hover:text-red-700 text-sm font-semibold">
-                                Abandonner
-                            </button>
-                            <button id="btn-resume-session" class="px-6 py-2 bg-blue-600 text-white font-bold rounded-full hover:bg-blue-700 shadow-lg transition transform hover:-translate-y-1">
-                                ▶️ Reprendre
-                            </button>
-                        </div>
-                    </div>
-
                     <div class="statistics-dashboard__summary mb-8">
                         <div class="progress-badge progress-badge--primary">
                             <span class="progress-badge__value" id="stat-total-reviewed">0</span>
@@ -582,6 +566,24 @@
                         <div class="progress-badge progress-badge--warning">
                             <span class="progress-badge__value" id="stat-streak">0</span>
                             <span class="progress-badge__label">Série actuelle</span>
+                        </div>
+                    </div>
+
+                    <div class="statistics-dashboard__panel mb-8">
+                        <h3 class="statistics-dashboard__panel-title mb-4">Répartition par difficulté</h3>
+                        <div class="grid grid-cols-3 gap-4 text-center">
+                            <div class="p-3 bg-green-50 rounded-lg border border-green-200">
+                                <span class="block text-2xl font-bold text-green-700" id="stat-count-easy">0</span>
+                                <span class="text-xs text-green-600 uppercase font-semibold">Facile</span>
+                            </div>
+                            <div class="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                <span class="block text-2xl font-bold text-blue-700" id="stat-count-normal">0</span>
+                                <span class="text-xs text-blue-600 uppercase font-semibold">Normale</span>
+                            </div>
+                            <div class="p-3 bg-red-50 rounded-lg border border-red-200">
+                                <span class="block text-2xl font-bold text-red-700" id="stat-count-hard">0</span>
+                                <span class="text-xs text-red-600 uppercase font-semibold">Difficile</span>
+                            </div>
                         </div>
                     </div>
 
@@ -638,7 +640,7 @@
             <div class="modal-content" role="document">
                 <button type="button" class="close" data-action="close-stats" aria-label="Fermer la fenêtre Statistiques">&times;</button>
                 <h2 id="stats-modal-title" class="text-2xl font-bold mb-4">📊 Statistiques</h2>
-                </div>
+            </div>
         </div>
 
     <script src="https://cdn.tailwindcss.com"></script>

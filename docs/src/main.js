@@ -1,6 +1,6 @@
 /**
  * LEITNER SYSTEM - MAIN LOGIC
- * Version: 3.4 (Historique Interactif & Détaillé)
+ * Version: 3.5 (Fix Clic Historique + Stats Difficulté)
  */
 
 // --- CONSTANTES ---
@@ -20,7 +20,7 @@ const APP_STATE = {
     config: { owner: 'leitexper1', repo: 'testleitnercodex', branch: 'main', path: 'docs/' }
 };
 
-// --- 1. PERSISTANCE ---
+// --- 1. PERSISTANCE (Ajout de la difficulté) ---
 
 const CardPersistence = {
     getStoredState: (filename) => {
@@ -29,10 +29,13 @@ const CardPersistence = {
         } catch (e) { return {}; }
     },
 
-    updateCard: (filename, cardId, box, lastReview) => {
+    updateCard: (filename, cardId, box, lastReview, difficulty) => {
         const allStates = JSON.parse(localStorage.getItem(STORAGE_KEYS.CARD_STATE) || '{}');
         if (!allStates[filename]) allStates[filename] = {};
-        allStates[filename][cardId] = { box, lastReview };
+        
+        // On sauvegarde tout
+        allStates[filename][cardId] = { box, lastReview, difficulty };
+        
         localStorage.setItem(STORAGE_KEYS.CARD_STATE, JSON.stringify(allStates));
     },
 
@@ -41,10 +44,11 @@ const CardPersistence = {
         csvData.forEach(card => {
             const state = stored[card.id];
             if (state) {
-                if (typeof state === 'number') card.box = state;
+                if (typeof state === 'number') card.box = state; // Migration
                 else {
                     if (state.box) card.box = state.box;
                     if (state.lastReview) card.lastReview = state.lastReview;
+                    if (state.difficulty) card.difficulty = state.difficulty; // Nouveau
                 }
             }
         });
@@ -205,7 +209,7 @@ const SessionManager = {
     save: () => {
         if (APP_STATE.session) {
             localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(APP_STATE.session));
-            StatsUI.renderHistory(); // Met à jour l'UI stats si ouverte
+            StatsUI.renderHistory();
         }
     },
 
@@ -256,6 +260,7 @@ const SessionManager = {
 const StatsUI = {
     init: () => {
         StatsUI.renderHistory();
+        StatsUI.renderDifficultyStats();
         
         document.getElementById('btn-clear-history')?.addEventListener('click', () => {
             if(confirm('Tout effacer ?')) {
@@ -264,9 +269,49 @@ const StatsUI = {
             }
         });
         
-        // On cache l'ancien bloc resume-area s'il existe encore dans le HTML
+        // FIX CLIC HISTORIQUE : Utilisation de l'Event Delegation sur la liste
+        const historyList = document.getElementById('stats-history-list');
+        if (historyList) {
+            historyList.addEventListener('click', (e) => {
+                const li = e.target.closest('li');
+                if (!li) return;
+
+                // Mode reprise
+                if (li.dataset.action === 'resume') {
+                    StatsUI.resumePending();
+                } 
+                // Mode info (historique terminé)
+                else if (li.dataset.action === 'info') {
+                    alert(li.dataset.info || 'Session terminée');
+                }
+            });
+        }
+        
         const oldResume = document.getElementById('resume-area');
         if(oldResume) oldResume.classList.add('hidden');
+    },
+
+    // NOUVEAU : Calcul des statistiques de difficulté
+    renderDifficultyStats: () => {
+        if (!CoreApp.csvData || CoreApp.csvData.length === 0) {
+            // Reset à 0 si rien n'est chargé
+            ['easy', 'normal', 'hard'].forEach(diff => {
+                document.getElementById(`stat-count-${diff}`).textContent = '0';
+            });
+            return;
+        }
+
+        let counts = { easy: 0, normal: 0, hard: 0 };
+        
+        CoreApp.csvData.forEach(card => {
+            const diff = card.difficulty || 'normal';
+            if (counts[diff] !== undefined) counts[diff]++;
+            else counts['normal']++; // fallback
+        });
+
+        document.getElementById('stat-count-easy').textContent = counts.easy;
+        document.getElementById('stat-count-normal').textContent = counts.normal;
+        document.getElementById('stat-count-hard').textContent = counts.hard;
     },
 
     renderHistory: () => {
@@ -278,14 +323,14 @@ const StatsUI = {
         
         let html = '';
         
-        // 1. AFFICHER LA SESSION EN COURS (SI EXISTE) EN PREMIER
         if (pending && pending.currentIndex < pending.totalCards) {
             const dateObj = new Date(pending.stats.startTime);
             const dateStr = dateObj.toLocaleDateString('fr-FR', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'});
             const remaining = pending.totalCards - pending.currentIndex;
             
+            // Note: Ajout de data-action="resume" pour le clic
             html += `
-            <li class="cursor-pointer hover:bg-blue-100 transition p-3 bg-blue-50 rounded border-l-4 border-blue-600 mb-2 shadow-sm" onclick="StatsUI.resumePending()">
+            <li data-action="resume" class="cursor-pointer hover:bg-blue-100 transition p-3 bg-blue-50 rounded border-l-4 border-blue-600 mb-2 shadow-sm">
                 <div class="flex justify-between items-center">
                     <div>
                         <strong class="text-blue-900 text-sm block">▶️ ${pending.deckName} (En cours)</strong>
@@ -299,7 +344,6 @@ const StatsUI = {
             </li>`;
         }
 
-        // 2. AFFICHER L'HISTORIQUE TERMINÉ
         if (history.length === 0 && !pending) {
             list.innerHTML = '<li class="p-4 text-center text-gray-500 italic">Aucune session.</li>';
             return;
@@ -308,19 +352,19 @@ const StatsUI = {
         let totalCards = 0;
         let totalCorrect = 0;
 
-        history.forEach((h, index) => {
+        history.forEach((h) => {
             const dateObj = new Date(h.date);
             const dateStr = dateObj.toLocaleDateString('fr-FR', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'});
             const [correct, total] = h.score.split('/').map(Number);
             totalCards += total;
             totalCorrect += correct;
 
-            // Couleur selon le score
             const borderClass = h.percent >= 80 ? 'border-green-500' : (h.percent >= 50 ? 'border-yellow-500' : 'border-red-400');
             const scoreColor = h.percent >= 80 ? 'text-green-700' : 'text-yellow-700';
 
+            // Note: Ajout de data-action="info"
             html += `
-            <li class="cursor-pointer hover:bg-gray-100 transition p-3 bg-white rounded border-l-4 ${borderClass} mb-2 shadow-sm" onclick="alert('Session terminée le ${dateStr}. Score : ${h.score}')">
+            <li data-action="info" data-info="Session terminée le ${dateStr}. Score : ${h.score}" class="cursor-pointer hover:bg-gray-100 transition p-3 bg-white rounded border-l-4 ${borderClass} mb-2 shadow-sm">
                 <div class="flex justify-between items-center">
                     <div>
                         <strong class="text-gray-800 text-sm block">${h.deck}</strong>
@@ -336,7 +380,6 @@ const StatsUI = {
 
         list.innerHTML = html;
 
-        // Mise à jour des badges globaux
         document.getElementById('stat-total-reviewed').textContent = totalCards;
         const globalRate = totalCards > 0 ? Math.round((totalCorrect / totalCards) * 100) : 0;
         document.getElementById('stat-success-rate').textContent = globalRate + '%';
@@ -346,14 +389,16 @@ const StatsUI = {
     resumePending: () => {
         const pending = SessionManager.loadPending();
         if (pending) {
+            // Vérification si le bon CSV est chargé
             if(CoreApp.csvData.length === 0 || CoreApp.csvData.filename !== pending.deckName) {
-                if(confirm(`Le fichier "${pending.deckName}" n'est pas chargé. Voulez-vous aller à l'onglet Révision pour le charger ?`)) {
+                if(confirm(`Le fichier "${pending.deckName}" doit être chargé. Aller à l'onglet Révision ?`)) {
                     document.getElementById('tab-review-trigger').click();
                 }
             } else {
                 document.getElementById('tab-review-trigger').click();
                 APP_STATE.isResuming = true;
                 APP_STATE.session = pending;
+                // IMPORTANT : Forcer l'affichage de la carte
                 CoreApp.startReview();
             }
         }
@@ -391,16 +436,15 @@ const CoreApp = {
                 CoreApp.csvData = data;
                 CoreApp.csvData.filename = filename;
 
-                // 1. Rendu des boîtes
                 CoreApp.renderBoxes();
-                
-                // 2. Rendu des contenus de boîtes
                 CoreApp.renderDeckOverview(); 
+                
+                // Mise à jour des stats de difficulté dès le chargement
+                StatsUI.renderDifficultyStats();
 
                 status.textContent = `${CoreApp.csvData.length} cartes chargées.`;
                 status.className = "mt-2 w-full text-sm text-green-600";
                 
-                // Mise à jour stats pour voir si une session correspond
                 StatsUI.renderHistory();
 
                 if (APP_STATE.isResuming && APP_STATE.session && APP_STATE.session.deckName === filename) {
@@ -442,6 +486,7 @@ const CoreApp = {
         el.setAttribute('aria-hidden', 'true');
         CoreApp.renderBoxes();
         CoreApp.renderDeckOverview();
+        StatsUI.renderDifficultyStats(); // Rafraîchir les stats
     },
 
     parseCSV: (text) => {
@@ -568,7 +613,15 @@ const CoreApp = {
                         dateInfo = `<span class="text-xs text-gray-400 block mt-1">Vu : ${d.toLocaleDateString()} ${d.toLocaleTimeString()}</span>`;
                     }
 
-                    cardEl.innerHTML = `${imgHtml}<div class="flex-1 min-w-0"><p class="font-semibold text-gray-800 truncate" title="${card.question}">${card.question}</p><p class="text-gray-500 truncate" title="${card.answer}">${card.answer}</p>${dateInfo}</div>`;
+                    // Badge difficulté
+                    let diffBadge = '';
+                    if (card.difficulty) {
+                        const colors = { easy: 'text-green-600', normal: 'text-blue-600', hard: 'text-red-600' };
+                        const labels = { easy: 'Facile', normal: 'Normal', hard: 'Difficile' };
+                        diffBadge = `<span class="text-xs ${colors[card.difficulty] || 'text-gray-500'} font-bold ml-2">(${labels[card.difficulty] || ''})</span>`;
+                    }
+
+                    cardEl.innerHTML = `${imgHtml}<div class="flex-1 min-w-0"><p class="font-semibold text-gray-800 truncate" title="${card.question}">${card.question}</p><p class="text-gray-500 truncate" title="${card.answer}">${card.answer}</p>${dateInfo} ${diffBadge}</div>`;
                     grid.appendChild(cardEl);
                 });
                 
@@ -613,6 +666,7 @@ const CoreApp = {
         document.getElementById('answer-section').classList.add('hidden');
         document.getElementById('show-answer-btn').classList.remove('hidden');
 
+        // Reset radio button to default 'normal'
         const normalRadio = document.getElementById('difficulty-normal');
         if(normalRadio) normalRadio.checked = true;
 
@@ -654,9 +708,16 @@ const CoreApp = {
                 newBox = 1;
             }
 
+            // Récupération de la difficulté choisie
+            const difficultyInput = document.querySelector('input[name="difficulty"]:checked');
+            const difficulty = difficultyInput ? difficultyInput.value : 'normal';
+
             card.box = newBox;
             card.lastReview = new Date().toISOString(); 
-            CardPersistence.updateCard(CoreApp.csvData.filename, cardId, newBox, card.lastReview);
+            card.difficulty = difficulty;
+
+            // Sauvegarde complète (Box, Date, Difficulté)
+            CardPersistence.updateCard(CoreApp.csvData.filename, cardId, newBox, card.lastReview, difficulty);
             
             const feedback = document.createElement('div');
             feedback.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-6 py-4 rounded-xl font-bold text-white shadow-2xl z-[100] text-xl flex flex-col items-center gap-2 animate-bounce ${isCorrect ? 'bg-green-600' : 'bg-red-500'}`;
