@@ -1,12 +1,11 @@
 /**
  * LEITNER SYSTEM - MAIN LOGIC
- * Version: 3.6 (Multi-Sessions & Reprise Ciblée)
+ * Version: 3.7 (Correctif Reprise de Session & Persistance)
  */
 
 // --- CONSTANTES ---
 const STORAGE_KEYS = {
-    // On utilise une nouvelle clé pour stocker la liste complète des sessions
-    ALL_SESSIONS: 'leitner_sessions_list', 
+    ALL_SESSIONS: 'leitner_sessions_list', // Liste unique de toutes les sessions
     CONFIG: 'leitner_config',
     CARD_STATE: 'leitner_card_state'
 };
@@ -15,11 +14,12 @@ const BOX_INTERVALS = { 1: 1, 2: 3, 3: 7, 4: 14, 5: 30 };
 
 const APP_STATE = {
     currentDeck: [],
-    session: null, // La session actuellement jouée
+    session: null,
+    isResuming: false, // Drapeau important pour la reprise différée
     config: { owner: 'leitexper1', repo: 'testleitnercodex', branch: 'main', path: 'docs/' }
 };
 
-// --- 1. PERSISTANCE DES CARTES (Boîte & Date) ---
+// --- 1. PERSISTANCE DES DONNÉES CARTES ---
 
 const CardPersistence = {
     getStoredState: (filename) => {
@@ -185,18 +185,16 @@ window.leitnerApp = window.leitnerApp || {};
 window.leitnerApp.ui = window.leitnerApp.ui || {};
 window.leitnerApp.ui.populateCSVSelector = UI.populateCSVSelector;
 
-// --- 3. GESTION DES SESSIONS (Nouveau Système Multi-Sessions) ---
+// --- 3. GESTIONNAIRE DE SESSIONS (COEUR DU SYSTÈME) ---
 
 const SessionManager = {
-    // Récupérer toutes les sessions
     getAll: () => {
         return JSON.parse(localStorage.getItem(STORAGE_KEYS.ALL_SESSIONS) || '[]');
     },
 
-    // Créer une nouvelle session
     start: (deckName, cards) => {
         const newSession = {
-            id: Date.now(), // Identifiant unique
+            id: Date.now(),
             deckName: deckName,
             totalCards: cards.length,
             cardsQueue: cards.map((c) => c.id),
@@ -204,24 +202,23 @@ const SessionManager = {
             stats: { correct: 0, wrong: 0 },
             startTime: new Date().toISOString(),
             lastUpdate: new Date().toISOString(),
-            status: 'active' // 'active' ou 'completed'
+            status: 'active'
         };
 
         const sessions = SessionManager.getAll();
-        sessions.unshift(newSession); // Ajouter au début
+        sessions.unshift(newSession);
         localStorage.setItem(STORAGE_KEYS.ALL_SESSIONS, JSON.stringify(sessions));
         
         APP_STATE.session = newSession;
+        APP_STATE.isResuming = false;
         return newSession;
     },
 
-    // Sauvegarder l'état de la session en cours dans la liste
     updateCurrent: () => {
         if (!APP_STATE.session) return;
         
         APP_STATE.session.lastUpdate = new Date().toISOString();
         
-        // Si fini
         if (APP_STATE.session.currentIndex >= APP_STATE.session.totalCards) {
             APP_STATE.session.status = 'completed';
         }
@@ -234,8 +231,7 @@ const SessionManager = {
             localStorage.setItem(STORAGE_KEYS.ALL_SESSIONS, JSON.stringify(sessions));
         }
         
-        // Mettre à jour l'UI stats si elle est visible
-        StatsUI.renderHistory();
+        StatsUI.renderHistory(); // Rafraîchissement temps réel
     },
 
     recordResult: (isCorrect) => {
@@ -247,26 +243,31 @@ const SessionManager = {
         SessionManager.updateCurrent();
     },
 
-    // Reprendre une session spécifique depuis l'historique
+    // CORRECTION MAJEURE ICI : La logique de reprise
     resumeById: (sessionId) => {
         const sessions = SessionManager.getAll();
         const sessionToResume = sessions.find(s => s.id === parseInt(sessionId));
         
         if (sessionToResume) {
-            // Vérifier si le fichier est chargé
-            if (CoreApp.csvData.length === 0 || CoreApp.csvData.filename !== sessionToResume.deckName) {
-                if(confirm(`Pour reprendre cette session, il faut charger le fichier "${sessionToResume.deckName}". Voulez-vous aller à l'onglet Révision ?`)) {
-                    document.getElementById('tab-review-trigger').click();
-                    // On ne peut pas charger automatiquement car c'est une action utilisateur sur le select
-                    alert(`Veuillez sélectionner "${sessionToResume.deckName}" dans la liste, puis revenez cliquer sur la session.`);
-                }
-                return;
-            }
-
-            // Tout est bon, on charge
+            // 1. On définit la session comme "cible" dans l'état global
             APP_STATE.session = sessionToResume;
-            document.getElementById('tab-review-trigger').click();
-            CoreApp.startReview();
+            APP_STATE.isResuming = true; // IMPORTANT
+
+            // 2. On vérifie si le fichier est DÉJÀ chargé
+            if (CoreApp.csvData.length > 0 && CoreApp.csvData.filename === sessionToResume.deckName) {
+                // Si oui, on lance directement
+                document.getElementById('tab-review-trigger').click();
+                CoreApp.startReview();
+            } else {
+                // 3. Si non, on redirige l'utilisateur pour qu'il charge le fichier
+                // Le flag 'isResuming' permettra de lancer la session dès le chargement (voir CoreApp.init)
+                if(confirm(`Pour reprendre cette session, le fichier "${sessionToResume.deckName}" doit être chargé.\n\nVoulez-vous aller à l'onglet Révision pour le sélectionner ?`)) {
+                    document.getElementById('tab-review-trigger').click();
+                    // On peut ajouter un petit focus visuel sur le selecteur si on veut
+                    const selector = document.getElementById('csv-selector');
+                    if(selector) selector.focus();
+                }
+            }
         } else {
             alert("Session introuvable.");
         }
@@ -285,7 +286,7 @@ const SessionManager = {
     }
 };
 
-// --- 4. STATISTIQUES (Liste interactive) ---
+// --- 4. STATISTIQUES (UI) ---
 
 const StatsUI = {
     init: () => {
@@ -296,15 +297,15 @@ const StatsUI = {
             if(confirm('Tout effacer ?')) SessionManager.deleteAll();
         });
         
-        // Gestionnaire de clics sur la liste (Event Delegation)
+        // Event Delegation pour la liste interactive
         const historyList = document.getElementById('stats-history-list');
         if (historyList) {
             historyList.addEventListener('click', (e) => {
-                // Gestion du bouton suppression (croix)
+                // Bouton Supprimer
                 if (e.target.classList.contains('delete-session-btn')) {
                     e.stopPropagation();
                     const id = e.target.dataset.id;
-                    if(confirm("Supprimer cette entrée ?")) SessionManager.deleteSession(id);
+                    if(confirm("Supprimer cette session de l'historique ?")) SessionManager.deleteSession(id);
                     return;
                 }
 
@@ -316,13 +317,18 @@ const StatsUI = {
 
                 if (status === 'active') {
                     SessionManager.resumeById(id);
-                } else {
-                    alert("Cette session est terminée. Pour rejouer ce paquet, sélectionnez-le dans l'onglet Révision.");
+                } else if (status === 'completed') {
+                    // Optionnel : permettre de rejouer
+                    const sess = SessionManager.getAll().find(s => s.id == id);
+                    if(sess && confirm(`Cette session est terminée (Score: ${sess.stats.correct}/${sess.totalCards}).\nVoulez-vous recommencer ce paquet à zéro ?`)) {
+                         // On simule une reprise mais en mode reset
+                         alert(`Veuillez sélectionner "${sess.deckName}" dans l'onglet Révision pour recommencer.`);
+                         document.getElementById('tab-review-trigger').click();
+                    }
                 }
             });
         }
         
-        // Cacher le vieux bloc "resume-area" s'il existe
         const oldResume = document.getElementById('resume-area');
         if(oldResume) oldResume.classList.add('hidden');
     },
@@ -365,26 +371,25 @@ const StatsUI = {
             const dateObj = new Date(s.lastUpdate);
             const dateStr = dateObj.toLocaleDateString('fr-FR', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'});
             
-            // Calculs globaux
             if (s.status === 'completed') {
                 totalCards += s.totalCards;
                 totalCorrect += s.stats.correct;
                 finishedCount++;
             }
 
-            // Affichage spécifique selon l'état
             if (s.status === 'active') {
                 const remaining = s.totalCards - s.currentIndex;
+                // Notez l'ajout de styles pour montrer que c'est cliquable
                 html += `
-                <li data-id="${s.id}" data-status="active" class="cursor-pointer hover:bg-blue-50 transition p-3 bg-white rounded border-l-4 border-blue-500 mb-2 shadow-sm group relative">
-                    <button class="delete-session-btn absolute top-2 right-2 text-gray-300 hover:text-red-500 hidden group-hover:block" data-id="${s.id}">✕</button>
-                    <div class="flex justify-between items-center pr-4">
+                <li data-id="${s.id}" data-status="active" class="cursor-pointer hover:bg-blue-50 transition p-3 bg-white rounded border-l-4 border-blue-500 mb-2 shadow-sm group relative" title="Cliquez pour reprendre">
+                    <button class="delete-session-btn absolute top-2 right-2 text-gray-300 hover:text-red-500 hidden group-hover:block px-2" data-id="${s.id}" title="Supprimer">✕</button>
+                    <div class="flex justify-between items-center pr-6">
                         <div>
                             <div class="flex items-center gap-2">
                                 <span class="animate-pulse w-2 h-2 bg-blue-500 rounded-full"></span>
                                 <strong class="text-blue-900 text-sm block">${s.deckName}</strong>
                             </div>
-                            <span class="text-xs text-gray-500 block mt-1">Dernière activité : ${dateStr}</span>
+                            <span class="text-xs text-gray-500 block mt-1">Reprendre (${dateStr})</span>
                         </div>
                         <div class="text-right">
                             <span class="block font-bold text-blue-600">${remaining} à voir</span>
@@ -393,22 +398,21 @@ const StatsUI = {
                     </div>
                 </li>`;
             } else {
-                // Session terminée
-                const percent = Math.round((s.stats.correct / s.totalCards) * 100) || 0;
-                const scoreColor = percent >= 80 ? 'text-green-600' : (percent >= 50 ? 'text-yellow-600' : 'text-red-600');
+                const percent = s.totalCards > 0 ? Math.round((s.stats.correct / s.totalCards) * 100) : 0;
                 const borderColor = percent >= 80 ? 'border-green-500' : (percent >= 50 ? 'border-yellow-500' : 'border-red-400');
+                const scoreColor = percent >= 80 ? 'text-green-600' : 'text-yellow-600';
 
                 html += `
-                <li data-id="${s.id}" data-status="completed" class="cursor-pointer hover:bg-gray-50 transition p-3 bg-white rounded border-l-4 ${borderColor} mb-2 shadow-sm group relative opacity-75 hover:opacity-100">
-                    <button class="delete-session-btn absolute top-2 right-2 text-gray-300 hover:text-red-500 hidden group-hover:block" data-id="${s.id}">✕</button>
-                    <div class="flex justify-between items-center pr-4">
+                <li data-id="${s.id}" data-status="completed" class="cursor-pointer hover:bg-gray-50 transition p-3 bg-white rounded border-l-4 ${borderColor} mb-2 shadow-sm group relative opacity-80 hover:opacity-100">
+                    <button class="delete-session-btn absolute top-2 right-2 text-gray-300 hover:text-red-500 hidden group-hover:block px-2" data-id="${s.id}" title="Supprimer">✕</button>
+                    <div class="flex justify-between items-center pr-6">
                         <div>
                             <strong class="text-gray-700 text-sm block">${s.deckName}</strong>
-                            <span class="text-xs text-gray-400 block mt-1">${dateStr}</span>
+                            <span class="text-xs text-gray-400 block mt-1">Terminé le ${dateStr}</span>
                         </div>
                         <div class="text-right">
                             <span class="block font-bold ${scoreColor}">${percent}%</span>
-                            <span class="text-xs text-gray-400">Terminé</span>
+                            <span class="text-xs text-gray-400">Score</span>
                         </div>
                     </div>
                 </li>`;
@@ -417,7 +421,7 @@ const StatsUI = {
 
         list.innerHTML = html;
 
-        // Mise à jour des badges
+        // Badges globaux
         document.getElementById('stat-total-reviewed').textContent = totalCards;
         const globalRate = totalCards > 0 ? Math.round((totalCorrect / totalCards) * 100) : 0;
         document.getElementById('stat-success-rate').textContent = globalRate + '%';
@@ -463,8 +467,15 @@ const CoreApp = {
                 status.textContent = `${CoreApp.csvData.length} cartes chargées.`;
                 status.className = "mt-2 w-full text-sm text-green-600";
                 
-                // Mettre à jour l'historique pour afficher les sessions actives possibles
-                StatsUI.renderHistory();
+                // --- LOGIQUE DE REPRISE AUTOMATIQUE ---
+                // Si on a cliqué sur "Reprendre" dans l'onglet stats, APP_STATE.isResuming est true
+                // et APP_STATE.session contient la session cible.
+                if (APP_STATE.isResuming && APP_STATE.session && APP_STATE.session.deckName === filename) {
+                    // On désactive le flag pour ne pas boucler
+                    APP_STATE.isResuming = false; 
+                    // On lance la review
+                    CoreApp.startReview();
+                }
 
             } catch (err) {
                 console.error(err);
@@ -502,8 +513,7 @@ const CoreApp = {
         CoreApp.renderBoxes();
         CoreApp.renderDeckOverview();
         StatsUI.renderDifficultyStats();
-        // Feedback session sauvegardée
-        StatsUI.renderHistory();
+        StatsUI.renderHistory(); // Refresh pour voir la session à jour
     },
 
     parseCSV: (text) => {
@@ -695,7 +705,7 @@ const CoreApp = {
         quitBtn.className = "mb-4 text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded w-full md:w-auto";
         quitBtn.onclick = () => {
             CoreApp.closeFlashcard();
-            // Petite notification
+            // Notification
             const toast = document.createElement('div');
             toast.className = 'fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-2 rounded shadow-lg z-50';
             toast.textContent = "Session sauvegardée dans l'onglet Statistiques";
