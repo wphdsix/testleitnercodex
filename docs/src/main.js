@@ -1,13 +1,14 @@
 /**
  * LEITNER SYSTEM - MAIN LOGIC
- * Version: 4.0 (Flow Continu & Maîtrise Totale)
+ * Version: 4.1 (Cycle Infini 5->1 & Cache Buster)
  */
 
 // --- CONSTANTES ---
 const STORAGE_KEYS = {
     ALL_SESSIONS: 'leitner_sessions_list', 
     CONFIG: 'leitner_config',
-    CARD_STATE: 'leitner_card_state'
+    CARD_STATE: 'leitner_card_state',
+    DECK_STATS: 'leitner_deck_stats' // Nouveau : Compteurs de cycles réussis par fichier
 };
 
 const BOX_INTERVALS = { 1: 1, 2: 3, 3: 7, 4: 14, 5: 30 };
@@ -19,7 +20,7 @@ const APP_STATE = {
     config: { owner: 'leitexper1', repo: 'testleitnercodex', branch: 'main', path: 'docs/' }
 };
 
-// --- 1. PERSISTANCE DES CARTES ---
+// --- 1. PERSISTANCE & STATS GLOBALES ---
 
 const CardPersistence = {
     getStoredState: (filename) => {
@@ -49,6 +50,26 @@ const CardPersistence = {
             }
         });
         return csvData;
+    }
+};
+
+// NOUVEAU : Gestion des compteurs de réussite par paquet
+const DeckStats = {
+    getAll: () => {
+        return JSON.parse(localStorage.getItem(STORAGE_KEYS.DECK_STATS) || '{}');
+    },
+    
+    get: (filename) => {
+        const stats = DeckStats.getAll();
+        return stats[filename] || { cycles: 0 };
+    },
+
+    incrementCycle: (filename) => {
+        const stats = DeckStats.getAll();
+        if (!stats[filename]) stats[filename] = { cycles: 0 };
+        stats[filename].cycles++;
+        localStorage.setItem(STORAGE_KEYS.DECK_STATS, JSON.stringify(stats));
+        return stats[filename].cycles;
     }
 };
 
@@ -185,7 +206,7 @@ window.leitnerApp = window.leitnerApp || {};
 window.leitnerApp.ui = window.leitnerApp.ui || {};
 window.leitnerApp.ui.populateCSVSelector = UI.populateCSVSelector;
 
-// --- 3. GESTION DE SESSIONS (Mode Maîtrise & Continu) ---
+// --- 3. GESTION DE SESSIONS ---
 
 const SessionManager = {
     getAll: () => {
@@ -196,7 +217,6 @@ const SessionManager = {
         const newSession = {
             id: Date.now(),
             deckName: deckName,
-            // Pour la maîtrise, on traque l'ensemble des IDs originaux de la session
             originalDeckIds: cards.map(c => c.id), 
             cardsQueue: cards.map((c) => c.id),
             totalCards: cards.length,
@@ -222,20 +242,14 @@ const SessionManager = {
         const s = APP_STATE.session;
         s.lastUpdate = new Date().toISOString();
         
-        // --- LOGIQUE MAÎTRISE ABSOLUE ---
-        // La session est terminée SEULEMENT si toutes les cartes sont en Boîte 5
+        // --- LOGIQUE CYCLE CONTINU ---
+        // Une session est "Terminée" pour l'historique quand la file d'attente est vide
+        // Mais le but est l'apprentissage continu.
         
-        // 1. Récupérer l'état actuel de toutes les cartes de la session
-        const allCardsInSession = CoreApp.csvData.filter(c => s.originalDeckIds && s.originalDeckIds.includes(c.id));
-        
-        // 2. Vérifier si elles sont toutes en boîte 5
-        const allMastered = allCardsInSession.length > 0 && allCardsInSession.every(c => c.box === 5);
-
-        if (allMastered) {
-            s.status = 'completed';
+        if (APP_STATE.session.currentIndex >= APP_STATE.session.totalCards) {
+            APP_STATE.session.status = 'completed';
         } else {
-            // Même si la file d'attente est vide, la session reste active tant que mastery non atteint
-            s.status = 'active'; 
+            APP_STATE.session.status = 'active'; 
         }
 
         const sessions = SessionManager.getAll();
@@ -266,31 +280,19 @@ const SessionManager = {
             APP_STATE.session = sessionToResume;
             APP_STATE.isResuming = true;
 
-            // Fichier chargé ?
             if (CoreApp.csvData.length > 0 && CoreApp.csvData.filename === sessionToResume.deckName) {
-                // --- BOUCLE D'APPRENTISSAGE ---
-                // Si la file est épuisée mais que le statut est toujours "active" (pas tout maîtrisé)
-                // On recharge automatiquement les cartes qui ne sont pas en boîte 5
-                if (sessionToResume.currentIndex >= sessionToResume.totalCards && sessionToResume.status === 'active') {
-                    
-                    const remainingCards = CoreApp.csvData.filter(c => 
-                        sessionToResume.originalDeckIds.includes(c.id) && c.box < 5
-                    );
-
-                    if (remainingCards.length > 0) {
-                        alert(`Nouveau tour ! Rechargement de ${remainingCards.length} cartes non maîtrisées (Boîte < 5).`);
-                        // Reset de la file avec les cartes restantes
-                        sessionToResume.cardsQueue = remainingCards.map(c => c.id);
-                        sessionToResume.totalCards = remainingCards.length;
-                        sessionToResume.currentIndex = 0;
-                        SessionManager.updateCurrent();
-                    } else {
-                        // Maîtrise atteinte (cas de bord)
-                        sessionToResume.status = 'completed';
-                        SessionManager.updateCurrent();
-                        alert("Félicitations ! Toutes les cartes de cette session sont maîtrisées.");
-                        return;
-                    }
+                // Si la session était finie, on propose de relancer les cartes "non maîtrisées" ou tout le paquet
+                if (sessionToResume.currentIndex >= sessionToResume.totalCards) {
+                    alert("Relance de la session pour un nouveau tour !");
+                    // On remet tout à zéro pour un nouveau tour sur ce paquet
+                    // Note: Pour un vrai Leitner continu, on devrait prendre les cartes < Box 5.
+                    // Ici on recharge simplement la session avec les cartes actuelles du paquet
+                    const currentCards = CoreApp.csvData.map(c => c.id);
+                    sessionToResume.cardsQueue = currentCards;
+                    sessionToResume.totalCards = currentCards.length;
+                    sessionToResume.currentIndex = 0;
+                    sessionToResume.status = 'active';
+                    SessionManager.updateCurrent();
                 }
 
                 document.getElementById('tab-review-trigger').click();
@@ -317,7 +319,8 @@ const SessionManager = {
     deleteAll: () => {
         localStorage.removeItem(STORAGE_KEYS.ALL_SESSIONS);
         localStorage.removeItem(STORAGE_KEYS.CARD_STATE);
-        alert("Reset complet effectué. Redémarrage...");
+        localStorage.removeItem(STORAGE_KEYS.DECK_STATS);
+        alert("Tout effacé. Redémarrage...");
         location.reload();
     }
 };
@@ -393,6 +396,10 @@ const StatsUI = {
             const dateObj = new Date(s.lastUpdate);
             const dateStr = dateObj.toLocaleDateString('fr-FR', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'});
             
+            // Récupération des stats de cycles réussis pour ce fichier
+            const deckStats = DeckStats.get(s.deckName);
+            const cyclesCount = deckStats.cycles || 0;
+
             if (s.status === 'completed') {
                 totalCards += s.totalCards;
                 totalCorrect += s.stats.correct;
@@ -402,34 +409,38 @@ const StatsUI = {
             let statusBadge = '';
             let borderColor = 'border-blue-500';
             let bgClass = 'bg-white';
-            let statusText = 'EN COURS';
             
+            // On affiche le nombre de cycles réussis (Box 5 -> 1)
+            let cycleBadge = cyclesCount > 0 
+                ? `<span class="text-xs font-bold text-purple-600 bg-purple-100 px-2 py-1 rounded ml-2">🏆 ${cyclesCount} Cycles</span>`
+                : '';
+
             if (s.status === 'completed') {
-                statusText = 'MAÎTRISÉ';
-                statusBadge = '<span class="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded">MAÎTRISÉ</span>';
-                borderColor = 'border-green-500';
-                bgClass = 'bg-green-50';
+                statusBadge = '<span class="text-xs font-bold text-gray-600 bg-gray-200 px-2 py-1 rounded">TERMINÉ</span>';
+                borderColor = 'border-gray-400';
+                bgClass = 'bg-gray-50';
             } else {
                 statusBadge = '<span class="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded">EN COURS</span>';
             }
 
             const remaining = s.totalCards - s.currentIndex;
-            const progressInfo = remaining <= 0 ? "Fin de cycle (Cliquer pour continuer)" : `${remaining} à voir`;
+            const progressInfo = remaining <= 0 ? "Revoir (cliquer)" : `${remaining} cartes`;
 
             html += `
-            <li data-id="${s.id}" data-status="${s.status}" class="cursor-pointer hover:bg-gray-50 transition p-3 ${bgClass} rounded border-l-4 ${borderColor} mb-2 shadow-sm group relative" title="Cliquer pour reprendre">
+            <li data-id="${s.id}" data-status="${s.status}" class="cursor-pointer hover:bg-gray-50 transition p-3 ${bgClass} rounded border-l-4 ${borderColor} mb-2 shadow-sm group relative" title="Cliquer pour gérer">
                 <button class="delete-session-btn absolute top-2 right-2 text-gray-400 hover:text-red-500 hidden group-hover:block px-2 text-lg" data-id="${s.id}" title="Supprimer">✕</button>
                 <div class="flex justify-between items-center pr-8">
                     <div>
-                        <div class="flex items-center gap-2 mb-1">
+                        <div class="flex flex-wrap items-center gap-2 mb-1">
                             <strong class="text-gray-800 text-sm">${s.deckName}</strong>
                             ${statusBadge}
+                            ${cycleBadge}
                         </div>
                         <span class="text-xs text-gray-500 block">Activité : ${dateStr}</span>
                     </div>
                     <div class="text-right">
                         <span class="block font-bold text-gray-700 text-sm">${progressInfo}</span>
-                        <span class="text-xs text-gray-400">Score: ${s.stats.correct}/${s.totalCards}</span>
+                        <span class="text-xs text-gray-400">Session: ${s.stats.correct}/${s.totalCards}</span>
                     </div>
                 </div>
             </li>`;
@@ -486,7 +497,6 @@ const CoreApp = {
 
                 if (APP_STATE.isResuming && APP_STATE.session && APP_STATE.session.deckName === filename) {
                     APP_STATE.isResuming = false;
-                    // Vérification de reload nécessaire au chargement
                     if (APP_STATE.session.currentIndex >= APP_STATE.session.totalCards && APP_STATE.session.status === 'active') {
                          SessionManager.resumeById(APP_STATE.session.id);
                     } else {
@@ -620,7 +630,6 @@ const CoreApp = {
         });
     },
 
-    // --- MISE À JOUR : CLIC = DÉBUT DE SESSION CONTINUE ---
     renderDeckOverview: () => {
         const container = document.getElementById('deck-overview-container');
         if(!container) return;
@@ -646,15 +655,10 @@ const CoreApp = {
                     const cardEl = document.createElement('div');
                     cardEl.className = 'border rounded p-3 hover:bg-blue-50 text-sm flex gap-3 cursor-pointer transition transform hover:-translate-y-1 hover:shadow-md';
                     
-                    // --- NOUVEAU LOGIQUE DE CLIC ---
                     cardEl.onclick = () => {
-                        // 1. On récupère TOUTES les cartes de la boîte
                         const boxCards = CoreApp.csvData.filter(c => c.box === boxNum);
-                        // 2. On met la carte cliquée en PREMIER
                         const otherCards = boxCards.filter(c => c.id !== card.id);
                         const sessionCards = [card, ...otherCards];
-                        
-                        // 3. On lance une session complète avec cet ordre
                         SessionManager.start(CoreApp.csvData.filename, sessionCards);
                         CoreApp.startReview();
                     };
@@ -701,15 +705,8 @@ const CoreApp = {
         if (!APP_STATE.session) return;
         const s = APP_STATE.session;
         if (s.currentIndex >= s.totalCards) {
-            SessionManager.updateCurrent(); // Update pour voir si mastery atteinte
-            
-            // Message personnalisé
-            const allDone = s.status === 'completed';
-            const msg = allDone 
-                ? "Session MAÎTRISÉE !\nToutes les cartes sont en Boîte 5." 
-                : `Cycle terminé (${s.stats.correct}/${s.totalCards}).\nCertaines cartes ne sont pas encore en Boîte 5.\nConsultez l'historique pour lancer le tour suivant.`;
-            
-            alert(msg);
+            SessionManager.updateCurrent(); 
+            alert(`Tour terminé !\nScore : ${s.stats.correct}/${s.totalCards}\n\nVoir l'onglet Statistiques pour les détails.`);
             CoreApp.closeFlashcard();
             return;
         }
@@ -772,8 +769,18 @@ const CoreApp = {
         if(card) {
             const oldBox = parseInt(card.box) || 1;
             let newBox = oldBox;
+            let cycleComplete = false;
+
             if(isCorrect) {
-                if(newBox < 5) newBox++;
+                if(newBox < 5) {
+                    newBox++;
+                } else {
+                    // --- CYCLE COMPLET : 5 -> 1 ---
+                    newBox = 1;
+                    cycleComplete = true;
+                    // Incrémenter les stats globales du deck
+                    DeckStats.incrementCycle(CoreApp.csvData.filename);
+                }
             } else {
                 newBox = 1;
             }
@@ -791,8 +798,8 @@ const CoreApp = {
             feedback.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-6 py-4 rounded-xl font-bold text-white shadow-2xl z-[100] text-xl flex flex-col items-center gap-2 animate-bounce ${isCorrect ? 'bg-green-600' : 'bg-red-500'}`;
             
             let message = '';
-            if(!isCorrect) message = "👎 Retour Boîte 1";
-            else if(oldBox === 5) message = "🎉 Maîtrise Max !";
+            if (!isCorrect) message = "👎 Retour Boîte 1";
+            else if (cycleComplete) message = "🏆 CYCLE VALIDÉ ! (+1)"; // Feedback spécial
             else message = `👍 Boîte ${oldBox} ➔ Boîte ${newBox}`;
             
             feedback.innerHTML = `<span>${message}</span>`;
