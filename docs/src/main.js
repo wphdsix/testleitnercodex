@@ -1,6 +1,6 @@
 /**
  * LEITNER SYSTEM - MAIN LOGIC
- * Version: 2.2 (Correctif ARIA & CSV Parser)
+ * Version: 2.3 (Aperçu Boîte 1 & Dates de révision)
  */
 
 // --- CONFIGURATION & CONSTANTES ---
@@ -8,6 +8,15 @@ const STORAGE_KEYS = {
     SESSION: 'leitner_active_session',
     HISTORY: 'leitner_session_history',
     CONFIG: 'leitner_config'
+};
+
+// Intervalles par défaut (en jours) pour le calcul des dates
+const BOX_INTERVALS = {
+    1: 1,
+    2: 3,
+    3: 7,
+    4: 14,
+    5: 30
 };
 
 const APP_STATE = {
@@ -178,7 +187,7 @@ const SessionManager = {
             id: Date.now(),
             deckName: deckName,
             totalCards: cards.length,
-            cardsQueue: cards.map((c) => c.id), // Stocker les IDs seulement pour être sûr
+            cardsQueue: cards.map((c) => c.id),
             currentIndex: 0,
             stats: { correct: 0, wrong: 0, startTime: Date.now() }
         };
@@ -246,7 +255,6 @@ const StatsUI = {
                 document.getElementById('tab-review-trigger').click();
                 APP_STATE.isResuming = true;
                 APP_STATE.session = pending;
-                // On attend que l'utilisateur charge le CSV, ou s'il est déjà là :
                 if (CoreApp.csvData.length > 0 && CoreApp.csvData.filename === pending.deckName) {
                      CoreApp.startReview();
                 }
@@ -334,11 +342,15 @@ const CoreApp = {
                 CoreApp.csvData = CoreApp.parseCSV(text);
                 CoreApp.csvData.filename = filename;
 
+                // 1. Mise à jour des boîtes (compteurs + dates)
                 CoreApp.renderBoxes();
+                
+                // 2. Affichage automatique de l'aperçu de la Boîte 1
+                CoreApp.renderPreviewList(1); 
+
                 status.textContent = `${CoreApp.csvData.length} cartes chargées.`;
                 status.className = "mt-2 w-full text-sm text-green-600";
                 
-                // Reprise auto si session correspondante
                 if (APP_STATE.isResuming && APP_STATE.session && APP_STATE.session.deckName === filename) {
                     CoreApp.startReview();
                 }
@@ -361,12 +373,11 @@ const CoreApp = {
             document.getElementById('cards-list-container').classList.add('hidden');
         });
         
-        // Gestion générique de la fermeture des modales (CORRECTION ARIA ICI)
         document.querySelectorAll('.modal .close, .flashcard-container, #admin-panel, #github-guide-modal').forEach(el => {
             el.addEventListener('click', (e) => {
                 if(e.target === el || e.target.classList.contains('close')) {
                     el.classList.add('hidden');
-                    el.setAttribute('aria-hidden', 'true'); // IMPORTANT: Marquer comme caché
+                    el.setAttribute('aria-hidden', 'true');
                     
                     document.getElementById('flashcard-container').classList.add('hidden');
                     document.getElementById('flashcard-container').setAttribute('aria-hidden', 'true');
@@ -386,40 +397,92 @@ const CoreApp = {
         if (lines.length === 0) return [];
 
         return lines.slice(1).map((line, index) => {
-            // Regex améliorée pour CSV
             const matches = [];
-            // Cette regex capture : "valeur entre guillemets" OU valeur sans virgule
             const regex = /(?:^|,)(?:"([^"]*)"|([^",]*))/g;
             let match;
             while ((match = regex.exec(line)) !== null) {
-                // match[1] = avec guillemets, match[2] = sans guillemets
                 let val = match[1] !== undefined ? match[1] : match[2];
                 val = val ? val.trim() : '';
                 matches.push(val);
             }
             
-            // Sécurité : s'assurer qu'on a les champs minimes
-            const question = matches[0] || 'Question vide';
-            const qImage = matches[1] || '';
-            const answer = matches[2] || 'Réponse vide';
-            const aImage = matches[3] || '';
-            const box = parseInt(matches[4]) || 1;
-            const lastReview = matches[5] || '';
-
-            return { id: index, question, qImage, answer, aImage, box, lastReview };
+            return {
+                id: index,
+                question: matches[0] || 'Question vide',
+                qImage: matches[1] || '',
+                answer: matches[2] || 'Réponse vide',
+                aImage: matches[3] || '',
+                box: parseInt(matches[4]) || 1,
+                lastReview: matches[5] || ''
+            };
         });
+    },
+
+    // Calcule la date de prochaine révision pour une boîte entière (la date la plus proche)
+    getNextReviewDateForBox: (boxNum, cards) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        let earliestDate = null;
+        let pendingCount = 0;
+
+        const intervalDays = BOX_INTERVALS[boxNum] || 1;
+
+        cards.forEach(card => {
+            if (!card.lastReview) {
+                // Si jamais révisé, c'est pour aujourd'hui
+                pendingCount++;
+            } else {
+                const last = new Date(card.lastReview);
+                if (!isNaN(last.getTime())) {
+                    const next = new Date(last);
+                    next.setDate(last.getDate() + intervalDays);
+                    
+                    if (next <= today) {
+                        pendingCount++;
+                    } else {
+                        if (!earliestDate || next < earliestDate) {
+                            earliestDate = next;
+                        }
+                    }
+                } else {
+                    pendingCount++; // Date invalide = à réviser
+                }
+            }
+        });
+
+        if (pendingCount > 0) return { text: "Maintenant", count: pendingCount, urgent: true };
+        if (earliestDate) return { text: earliestDate.toLocaleDateString('fr-FR'), count: 0, urgent: false };
+        return { text: "Aucune", count: 0, urgent: false };
     },
 
     renderBoxes: () => {
         const container = document.getElementById('leitner-boxes');
         container.innerHTML = '';
         [1, 2, 3, 4, 5].forEach(num => {
-            const count = CoreApp.csvData.filter(c => c.box === num).length;
+            const cards = CoreApp.csvData.filter(c => c.box === num);
+            const count = cards.length;
+            
+            // Calcul de la date de révision
+            const reviewInfo = CoreApp.getNextReviewDateForBox(num, cards);
+            const reviewHtml = reviewInfo.urgent 
+                ? `<span class="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded-full">À réviser (${reviewInfo.count})</span>`
+                : `<span class="text-xs text-gray-500">Prochaine : ${reviewInfo.text}</span>`;
+
             const div = document.createElement('div');
-            div.className = `bg-white p-4 rounded shadow border-t-4 box-border-${num} hover:shadow-lg transition cursor-pointer`;
-            div.innerHTML = `<h3 class="font-bold text-gray-700 text-box${num}">Boîte ${num}</h3><p class="text-2xl font-bold mt-2">${count}</p>`;
+            div.className = `bg-white p-4 rounded shadow border-t-4 box-border-${num} hover:shadow-lg transition cursor-pointer flex flex-col justify-between`;
+            div.innerHTML = `
+                <div>
+                    <h3 class="font-bold text-gray-700 text-box${num}">Boîte ${num}</h3>
+                    <p class="text-3xl font-bold mt-2 text-gray-800">${count}</p>
+                    <p class="text-xs text-gray-500 uppercase tracking-wide mb-3">cartes</p>
+                </div>
+                <div class="mt-2 border-t pt-2">
+                    ${reviewHtml}
+                </div>
+            `;
+            
+            // Clic sur la boîte -> Lance la session Flashcard
             div.addEventListener('click', () => {
-                const cards = CoreApp.csvData.filter(c => c.box === num);
                 if(cards.length) {
                     SessionManager.start(CoreApp.csvData.filename, cards);
                     CoreApp.startReview();
@@ -429,6 +492,50 @@ const CoreApp = {
             });
             container.appendChild(div);
         });
+    },
+
+    // Nouvelle fonction : Affiche la liste (aperçu) sous les boîtes
+    renderPreviewList: (boxNum) => {
+        const listContainer = document.getElementById('cards-list-container');
+        const listBody = document.getElementById('cards-list');
+        const title = document.getElementById('cards-list-title');
+        
+        // Mettre à jour le titre
+        document.getElementById('current-box-number').textContent = boxNum;
+        
+        // Filtrer les cartes
+        const cards = CoreApp.csvData.filter(c => c.box === boxNum);
+        
+        listBody.innerHTML = '';
+        
+        if (cards.length === 0) {
+            listBody.innerHTML = '<p class="text-gray-500 col-span-full text-center py-4">Aucune carte dans cette boîte.</p>';
+        } else {
+            cards.forEach(card => {
+                const cardEl = document.createElement('div');
+                cardEl.className = 'border rounded p-3 hover:bg-gray-50 text-sm flex gap-3';
+                
+                // Petite miniature si image
+                let imgHtml = '';
+                const imgUrl = CoreApp.buildImageUrl(card.qImage, 'q');
+                if (imgUrl) {
+                    imgHtml = `<div class="w-12 h-12 flex-shrink-0 bg-gray-200 rounded overflow-hidden">
+                        <img src="${imgUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'">
+                    </div>`;
+                }
+
+                cardEl.innerHTML = `
+                    ${imgHtml}
+                    <div class="flex-1 min-w-0">
+                        <p class="font-semibold text-gray-800 truncate">${card.question}</p>
+                        <p class="text-gray-500 truncate">${card.answer}</p>
+                    </div>
+                `;
+                listBody.appendChild(cardEl);
+            });
+        }
+
+        listContainer.classList.remove('hidden');
     },
 
     buildImageUrl: (filename, type) => {
@@ -454,16 +561,12 @@ const CoreApp = {
             return;
         }
         
-        // On récupère l'ID de la carte courante dans la file d'attente
         const cardId = s.cardsQueue[s.currentIndex];
-        // On cherche la carte complète dans les données chargées
         const card = CoreApp.csvData.find(c => c.id === cardId);
 
         if (card) {
             CoreApp.showCardUI(card);
         } else {
-            console.error("Carte introuvable pour l'ID:", cardId);
-            // Passer à la suivante si erreur
             s.currentIndex++;
             CoreApp.startReview();
         }
@@ -471,26 +574,22 @@ const CoreApp = {
 
     showCardUI: (card) => {
         const container = document.getElementById('flashcard-container');
-        // CORRECTION ARIA : On rend le conteneur visible aux lecteurs d'écran AVANT
         container.classList.remove('hidden');
         container.setAttribute('aria-hidden', 'false'); 
         
         document.getElementById('answer-section').classList.add('hidden');
         document.getElementById('show-answer-btn').classList.remove('hidden');
 
-        // Question
         let qHtml = `<p class="text-xl">${card.question || '...'}</p>`;
         const qImgUrl = CoreApp.buildImageUrl(card.qImage, 'q');
         if(qImgUrl) qHtml += `<img src="${qImgUrl}" class="max-w-full h-auto mt-4 rounded shadow-sm mx-auto max-h-60 object-contain" onerror="this.style.display='none'">`;
         document.getElementById('question-content').innerHTML = qHtml;
 
-        // Réponse
         let aHtml = `<p class="text-xl">${card.answer || '...'}</p>`;
         const aImgUrl = CoreApp.buildImageUrl(card.aImage, 'a');
         if(aImgUrl) aHtml += `<img src="${aImgUrl}" class="max-w-full h-auto mt-4 rounded shadow-sm mx-auto max-h-60 object-contain" onerror="this.style.display='none'">`;
         document.getElementById('answer-content').innerHTML = aHtml;
         
-        // Donner le focus au bouton de réponse pour la navigation clavier
         setTimeout(() => document.getElementById('show-answer-btn').focus(), 50);
     },
 
