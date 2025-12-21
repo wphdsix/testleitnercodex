@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" href="mordor-2340048_1280.png">
     
     <script>
-      // Fonction utilitaire pour éviter le cache navigateur et CDN
+      // Fonction pour nettoyer les URLs et éviter le cache
       function getNoCacheUrl(url) {
           const separator = url.includes('?') ? '&' : '?';
           return `${url}${separator}t=${Date.now()}`;
@@ -21,11 +21,19 @@
         const folderPath = 'docs';
         const folderPrefix = folderPath.endsWith('/') ? folderPath : `${folderPath}/`;
     
-        // Ajout du paramètre timestamp pour éviter le cache GitHub API
-        const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1&t=${Date.now()}`;
+        // ASTUCE ANTI-CACHE : On ajoute l'heure actuelle à la requête API
+        const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1&timestamp=${Date.now()}`;
         
-        // Option 'no-store' pour forcer le navigateur à ne pas utiliser son cache
-        const response = await fetch(treeUrl, { cache: 'no-store' });
+        console.log("Tentative de récupération GitHub sur :", treeUrl);
+
+        // En-têtes pour forcer le réseau
+        const response = await fetch(treeUrl, { 
+            cache: 'no-store',
+            headers: {
+                'Pragma': 'no-cache',
+                'Cache-Control': 'no-cache'
+            }
+        });
     
         if (!response.ok) {
           throw new Error(`Erreur API GitHub : ${response.status}`);
@@ -41,10 +49,10 @@
           .map(item => {
             const relativePath = item.path.substring(folderPrefix.length);
             const publicPath = item.path.startsWith('docs/') ? item.path.substring(5) : item.path;
-            const encodedPath = item.path
-              .split('/')
-              .map(segment => encodeURIComponent(segment))
-              .join('/');
+            // On encode proprement les chemins
+            const encodedPath = item.path.split('/').map(encodeURIComponent).join('/');
+            
+            // On ajoute aussi l'anti-cache sur le lien de téléchargement direct
             const downloadUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodedPath}`;
     
             return {
@@ -57,241 +65,112 @@
           .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
       }
     
-      async function fetchCsvFilesFromManifest() {
-        const manifestCandidates = ['csv-files.json', 'csv_manifest.json', '__csv_manifest.json'];
-    
-        for (const manifestName of manifestCandidates) {
-          try {
-            // Timestamp anti-cache pour le fichier json local
-            const response = await fetch(`${manifestName}?t=${Date.now()}`, { cache: 'no-store' });
-            if (!response.ok) {
-              continue;
-            }
-    
-            const payload = await response.json();
-            const entries = Array.isArray(payload)
-              ? payload
-              : Array.isArray(payload?.files)
-                ? payload.files
-                : [];
-    
-            const files = entries
-              .map(entry => {
-                if (typeof entry === 'string') {
-                  return { name: entry, publicPath: entry };
-                }
-    
-                const name = entry?.name || entry?.path || '';
-                const publicPath = entry?.publicPath || entry?.path || entry?.name || '';
-    
-                return name && publicPath ? { name, publicPath } : null;
-              })
-              .filter(Boolean)
-              .map(file => {
-                let downloadUrl = '';
-                try {
-                  downloadUrl = new URL(file.publicPath, window.location.href).href;
-                } catch (error) {
-                  console.warn('Impossible de résoudre le chemin CSV local', file.publicPath, error);
-                }
-    
-                return {
-                  ...file,
-                  download_url: downloadUrl,
-                  source: 'manifest'
-                };
-              })
-              .filter(file => !!file.download_url)
-              .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-    
-            if (files.length > 0) {
-              return files;
-            }
-          } catch (error) {
-            console.warn(`Lecture du manifeste CSV local échouée (${manifestName})`, error);
-          }
-        }
-    
-        return [];
-      }
-    
-      function mergeCsvFileLists(primary = [], secondary = []) {
-        const merged = [];
-        const seen = new Set();
-    
-        [...primary, ...secondary].forEach((file) => {
-          const name = file?.name;
-          if (!name || seen.has(name)) {
-            return;
-          }
-          seen.add(name);
-          merged.push(file);
-        });
-    
-        return merged.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
-      }
-    
-      function areCsvListsDifferent(next = [], previous = []) {
-        if (next.length !== previous.length) {
-          return true;
-        }
-    
-        const namesA = next.map(file => file.name).sort((a, b) => a.localeCompare(b, 'fr'));
-        const namesB = previous.map(file => file.name).sort((a, b) => a.localeCompare(b, 'fr'));
-    
-        return namesA.some((name, index) => name !== namesB[index]);
-      }
-    
-      function populateCsvSelect(select, csvFiles, { preferredName = null, source = 'github', preserveSelection = true } = {}) {
-        if (!select) {
-          return;
-        }
-    
-        const files = Array.isArray(csvFiles)
-          ? csvFiles.filter(file => !!file?.name)
-          : [];
-    
-        const previousValue = preserveSelection
-          ? (preferredName ?? select.value ?? null)
-          : (preferredName ?? null);
-        const selectedName = files.find(file => file.name === previousValue)?.name
-          || files[0]?.name
-          || '';
-    
-        // Utilisation de la fonction du main.js si disponible pour l'affichage groupé
+      // --- LOGIQUE DE REMPLISSAGE DU SELECT ---
+      function populateCsvSelect(select, csvFiles, { preferredName = null } = {}) {
+        if (!select) return;
+        
+        // Si le script principal (main.js) est chargé, on utilise sa fonction de tri sophistiquée
         if (window.leitnerApp?.ui?.populateCSVSelector) {
-          window.leitnerApp.ui.populateCSVSelector(files, { selectedName: selectedName || null });
+            window.leitnerApp.ui.populateCSVSelector(csvFiles, { selectedName: preferredName });
         } else {
-          // Fallback simple
-          select.innerHTML = '';
-          if (!files.length) {
-            const emptyOption = document.createElement('option');
-            emptyOption.value = '';
-            emptyOption.textContent = 'Aucun fichier .csv trouvé';
-            emptyOption.disabled = true;
-            select.appendChild(emptyOption);
-          } else {
-            files.forEach((file, index) => {
-              const option = document.createElement('option');
-              const name = file.name || file.publicPath || `csv-${index + 1}`;
-              option.value = name;
-              option.textContent = name;
-              option.dataset.name = name;
-              
-              if (file.download_url) {
-                // Important : on ajoute aussi le cache-buster à l'URL de téléchargement du fichier
-                option.dataset.downloadUrl = getNoCacheUrl(file.download_url);
-              }
-              if (file.publicPath) {
-                option.dataset.publicPath = file.publicPath;
-              }
-              option.dataset.source = file.source || source || '';
-              
-              if (name === selectedName) {
-                option.selected = true;
-              }
-              select.appendChild(option);
-            });
-          }
+            // Fallback (si main.js n'est pas encore prêt)
+            select.innerHTML = '';
+            if (!csvFiles.length) {
+                select.innerHTML = '<option value="">Aucun fichier trouvé</option>';
+            } else {
+                csvFiles.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file.download_url; // Important : value = URL
+                    option.textContent = file.name;
+                    option.dataset.name = file.name;
+                    if (file.name === preferredName) option.selected = true;
+                    select.appendChild(option);
+                });
+            }
         }
-    
-        if (!files.length) {
-          select.value = '';
-          select.dataset.hasFiles = 'false';
-        } else if (selectedName) {
-          select.value = selectedName;
-          select.dataset.hasFiles = 'true';
-        }
-    
-        select.dataset.bootstrapSource = source;
-    
-        const detail = {
-          files: files.map(file => ({ ...file })),
-          source,
-          selectedName: selectedName || null,
-          timestamp: Date.now()
-        };
-    
-        window.__leitnerCSVBootstrap = detail;
-        window.dispatchEvent(new CustomEvent('leitner:csv-list-updated', { detail }));
       }
     
       async function loadCsvFiles({ preserveSelection = true } = {}) {
         const select = document.getElementById('csv-selector');
-        if (!select) {
-          return;
+        const status = document.getElementById('csv-load-status');
+        if (!select) return;
+    
+        // Feedback visuel immédiat
+        select.disabled = true;
+        const savedText = select.options[select.selectedIndex]?.text || "Chargement...";
+        select.innerHTML = '<option>Actualisation depuis GitHub...</option>';
+        if(status) {
+            status.classList.remove('hidden');
+            status.textContent = "Connexion à GitHub...";
+            status.className = "mt-2 w-full text-sm text-blue-600";
         }
     
-        select.disabled = true;
-        select.innerHTML = '<option value="">Recherche des fichiers...</option>';
-    
         try {
-          let githubFiles = [];
-          let source = 'github';
+          // 1. Appel API GitHub
+          const githubFiles = await fetchCsvFilesFromGitHub();
+          
+          // 2. Gestion de la sélection
+          const currentVal = window.__leitnerSelectedName;
+          const preferredName = preserveSelection ? (currentVal || null) : null;
     
-          try {
-            githubFiles = await fetchCsvFilesFromGitHub();
-          } catch (error) {
-            console.warn('Chargement via GitHub impossible, tentative avec le manifeste local.', error);
-            source = 'manifest';
+          // 3. Remplissage
+          populateCsvSelect(select, githubFiles, { preferredName });
+          
+          // 4. Succès
+          if(status) {
+              status.textContent = `${githubFiles.length} fichiers trouvés.`;
+              status.className = "mt-2 w-full text-sm text-green-600";
+              setTimeout(() => status.classList.add('hidden'), 3000);
           }
-    
-          let manifestFiles = [];
-    
-          try {
-            manifestFiles = await fetchCsvFilesFromManifest();
-          } catch (error) {
-            console.warn('Chargement du manifeste local impossible.', error);
-          }
-    
-          const csvFiles = mergeCsvFileLists(githubFiles, manifestFiles);
-    
-          if (manifestFiles.length && !githubFiles.length) {
-            source = 'manifest';
-          } else if (manifestFiles.length && githubFiles.length) {
-            source = 'mixed';
-          }
-    
-          const preferredName = preserveSelection
-            ? (select.value || window.__leitnerCSVBootstrap?.selectedName || null)
-            : (window.__leitnerCSVBootstrap?.selectedName || null);
-    
-          populateCsvSelect(select, csvFiles, { preferredName, source, preserveSelection });
+
         } catch (err) {
-          console.error('Impossible de charger les fichiers CSV :', err);
-          select.innerHTML = '<option value="">Erreur de chargement</option>';
-          return;
+          console.error('Erreur chargement CSV :', err);
+          select.innerHTML = '<option value="">Erreur de connexion</option>';
+          if(status) {
+              status.textContent = "Erreur : Impossible de joindre GitHub.";
+              status.className = "mt-2 w-full text-sm text-red-600";
+          }
         } finally {
-          const bs = window.__leitnerCSVBootstrap; 
-          const hasFiles = bs && Array.isArray(bs.files) && bs.files.length > 0;
-          select.disabled = !hasFiles;
+          select.disabled = false;
         }
       }
     
-      // Désactivation du watcher automatique qui pourrait créer des conflits de cache
-      // On préfère un chargement explicite au démarrage
-      
       document.addEventListener('DOMContentLoaded', () => {
-        loadCsvFiles({ preserveSelection: false })
-          .catch(error => console.error('Chargement initial des CSV échoué', error));
+        // Chargement initial
+        loadCsvFiles({ preserveSelection: false });
+
+        // Écouteur sur le bouton de rafraîchissement
+        document.getElementById('refresh-csv-btn')?.addEventListener('click', () => {
+            loadCsvFiles({ preserveSelection: true });
+        });
+
+        // Sauvegarde de la sélection pour ne pas la perdre au refresh
+        document.getElementById('csv-selector')?.addEventListener('change', (e) => {
+            const opt = e.target.options[e.target.selectedIndex];
+            if(opt) window.__leitnerSelectedName = opt.dataset.name;
+        });
       });
     
       function openImportExport() {
         const select = document.getElementById('csv-selector');
         const selectedOption = select?.selectedOptions?.[0];
-        const selectedFile = selectedOption?.dataset?.downloadUrl
-          || selectedOption?.dataset?.publicPath
-          || selectedOption?.value;
+        
+        // On sécurise la récupération de l'URL
+        let selectedFile = selectedOption?.value;
+        // Si la value n'est pas une URL (cas du fallback), on cherche dans le dataset
+        if (!selectedFile || !selectedFile.startsWith('http')) {
+             selectedFile = selectedOption?.dataset?.downloadUrl;
+        }
     
         if (!selectedFile) {
-          alert('Veuillez sélectionner un fichier CSV.');
+          alert('Veuillez sélectionner un fichier CSV valide.');
           return;
         }
         const url = `import-export.html?csv=${encodeURIComponent(selectedFile)}`;
         window.open(url, '_blank', 'noopener,noreferrer');
       }
     </script>
-
+</head>
 <body class="site-background text-gray-800">
     <div class="container mx-auto max-w-6xl p-5">
         <header class="text-center mb-8">
@@ -330,10 +209,15 @@
                         <p id="csv-load-status" class="mt-2 w-full text-sm text-green-600 hidden" role="status" aria-live="polite"></p>
                     </div>
 
-                    <div class="mb-4 flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
-                        <select id="csv-selector" class="p-2 border rounded w-full md:min-w-[250px] md:max-w-[350px]">
-                            <option value="">Chargement des fichiers...</option>
-                        </select>
+                    <div class="mb-4 flex flex-col md:flex-row md:items-center gap-2">
+                        <div class="flex-grow flex gap-2 w-full md:w-auto">
+                            <select id="csv-selector" class="p-2 border rounded w-full md:min-w-[300px]">
+                                <option value="">Initialisation...</option>
+                            </select>
+                            <button id="refresh-csv-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded border border-gray-300" title="Forcer la mise à jour depuis GitHub">
+                                🔄
+                            </button>
+                        </div>
                     </div>
                 </div>
 
