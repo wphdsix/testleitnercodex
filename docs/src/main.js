@@ -1,6 +1,6 @@
 /**
  * LEITNER SYSTEM - MAIN LOGIC
- * Version: 3.3 (Aperçu global & Radio Buttons)
+ * Version: 3.4 (Historique Interactif & Détaillé)
  */
 
 // --- CONSTANTES ---
@@ -205,7 +205,7 @@ const SessionManager = {
     save: () => {
         if (APP_STATE.session) {
             localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(APP_STATE.session));
-            StatsUI.checkForPendingSession();
+            StatsUI.renderHistory(); // Met à jour l'UI stats si ouverte
         }
     },
 
@@ -219,7 +219,7 @@ const SessionManager = {
 
     pauseAndExit: () => {
         CoreApp.closeFlashcard();
-        alert("Session sauvegardée !");
+        alert("Session mise en pause. Retrouvez-la dans l'onglet Statistiques.");
     },
 
     complete: () => {
@@ -238,7 +238,6 @@ const SessionManager = {
         localStorage.removeItem(STORAGE_KEYS.SESSION);
         APP_STATE.session = null;
         StatsUI.renderHistory();
-        StatsUI.checkForPendingSession();
     },
 
     loadPending: () => {
@@ -248,7 +247,7 @@ const SessionManager = {
 
     discard: () => {
         localStorage.removeItem(STORAGE_KEYS.SESSION);
-        StatsUI.checkForPendingSession();
+        StatsUI.renderHistory();
     }
 };
 
@@ -256,73 +255,108 @@ const SessionManager = {
 
 const StatsUI = {
     init: () => {
-        StatsUI.checkForPendingSession();
         StatsUI.renderHistory();
         
-        document.getElementById('btn-resume-session')?.addEventListener('click', () => {
-            const pending = SessionManager.loadPending();
-            if (pending) {
-                if(CoreApp.csvData.length === 0 || CoreApp.csvData.filename !== pending.deckName) {
-                    alert(`Veuillez d'abord charger le fichier "${pending.deckName}" dans l'onglet Révision.`);
-                    document.getElementById('tab-review-trigger').click();
-                } else {
-                    document.getElementById('tab-review-trigger').click();
-                    APP_STATE.isResuming = true;
-                    APP_STATE.session = pending;
-                    CoreApp.startReview();
-                }
-            }
-        });
-
-        document.getElementById('btn-discard-session')?.addEventListener('click', () => {
-            if(confirm('Abandonner la session en cours ?')) SessionManager.discard();
-        });
-
         document.getElementById('btn-clear-history')?.addEventListener('click', () => {
             if(confirm('Tout effacer ?')) {
                 localStorage.removeItem(STORAGE_KEYS.HISTORY);
                 StatsUI.renderHistory();
             }
         });
-    },
-
-    checkForPendingSession: () => {
-        const pending = SessionManager.loadPending();
-        const area = document.getElementById('resume-area');
-        if (pending && pending.currentIndex < pending.totalCards) {
-            area.classList.remove('hidden');
-            document.getElementById('resume-count').textContent = pending.totalCards - pending.currentIndex;
-            document.getElementById('resume-deck-name').textContent = "Fichier : " + pending.deckName;
-        } else {
-            area.classList.add('hidden');
-        }
+        
+        // On cache l'ancien bloc resume-area s'il existe encore dans le HTML
+        const oldResume = document.getElementById('resume-area');
+        if(oldResume) oldResume.classList.add('hidden');
     },
 
     renderHistory: () => {
         const list = document.getElementById('stats-history-list');
+        if(!list) return;
+
         const history = JSON.parse(localStorage.getItem(STORAGE_KEYS.HISTORY) || '[]');
-        if (history.length === 0) {
-            list.innerHTML = '<li class="p-4 text-center text-gray-500 italic">Historique vide.</li>';
-            document.getElementById('stat-total-reviewed').textContent = '0';
-            document.getElementById('stat-success-rate').textContent = '0%';
+        const pending = SessionManager.loadPending();
+        
+        let html = '';
+        
+        // 1. AFFICHER LA SESSION EN COURS (SI EXISTE) EN PREMIER
+        if (pending && pending.currentIndex < pending.totalCards) {
+            const dateObj = new Date(pending.stats.startTime);
+            const dateStr = dateObj.toLocaleDateString('fr-FR', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'});
+            const remaining = pending.totalCards - pending.currentIndex;
+            
+            html += `
+            <li class="cursor-pointer hover:bg-blue-100 transition p-3 bg-blue-50 rounded border-l-4 border-blue-600 mb-2 shadow-sm" onclick="StatsUI.resumePending()">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <strong class="text-blue-900 text-sm block">▶️ ${pending.deckName} (En cours)</strong>
+                        <span class="text-xs text-blue-700">${dateStr}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="block font-bold text-blue-800">${remaining} à voir</span>
+                        <span class="text-xs text-blue-600">sur ${pending.totalCards}</span>
+                    </div>
+                </div>
+            </li>`;
+        }
+
+        // 2. AFFICHER L'HISTORIQUE TERMINÉ
+        if (history.length === 0 && !pending) {
+            list.innerHTML = '<li class="p-4 text-center text-gray-500 italic">Aucune session.</li>';
             return;
         }
-        let html = '';
-        let totalCards = 0, totalCorrect = 0;
-        history.forEach(h => {
-            const date = new Date(h.date).toLocaleDateString('fr-FR');
+
+        let totalCards = 0;
+        let totalCorrect = 0;
+
+        history.forEach((h, index) => {
+            const dateObj = new Date(h.date);
+            const dateStr = dateObj.toLocaleDateString('fr-FR', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'});
             const [correct, total] = h.score.split('/').map(Number);
-            totalCards += total; totalCorrect += correct;
+            totalCards += total;
+            totalCorrect += correct;
+
+            // Couleur selon le score
+            const borderClass = h.percent >= 80 ? 'border-green-500' : (h.percent >= 50 ? 'border-yellow-500' : 'border-red-400');
+            const scoreColor = h.percent >= 80 ? 'text-green-700' : 'text-yellow-700';
+
             html += `
-            <li class="flex justify-between items-center mb-2 p-3 bg-gray-50 rounded border-l-4 ${h.percent >= 80 ? 'border-green-500' : 'border-yellow-500'}">
-                <div><strong class="text-gray-800 text-sm block">${h.deck}</strong><span class="text-xs text-gray-500">${date}</span></div>
-                <div class="text-right"><span class="font-bold">${h.percent}%</span></div>
+            <li class="cursor-pointer hover:bg-gray-100 transition p-3 bg-white rounded border-l-4 ${borderClass} mb-2 shadow-sm" onclick="alert('Session terminée le ${dateStr}. Score : ${h.score}')">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <strong class="text-gray-800 text-sm block">${h.deck}</strong>
+                        <span class="text-xs text-gray-500">${dateStr}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="block font-bold ${scoreColor}">Terminé</span>
+                        <span class="text-xs text-gray-400">Score: ${h.score}</span>
+                    </div>
+                </div>
             </li>`;
         });
+
         list.innerHTML = html;
+
+        // Mise à jour des badges globaux
         document.getElementById('stat-total-reviewed').textContent = totalCards;
-        document.getElementById('stat-success-rate').textContent = (totalCards > 0 ? Math.round((totalCorrect/totalCards)*100) : 0) + '%';
+        const globalRate = totalCards > 0 ? Math.round((totalCorrect / totalCards) * 100) : 0;
+        document.getElementById('stat-success-rate').textContent = globalRate + '%';
         document.getElementById('stat-streak').textContent = history.length;
+    },
+
+    resumePending: () => {
+        const pending = SessionManager.loadPending();
+        if (pending) {
+            if(CoreApp.csvData.length === 0 || CoreApp.csvData.filename !== pending.deckName) {
+                if(confirm(`Le fichier "${pending.deckName}" n'est pas chargé. Voulez-vous aller à l'onglet Révision pour le charger ?`)) {
+                    document.getElementById('tab-review-trigger').click();
+                }
+            } else {
+                document.getElementById('tab-review-trigger').click();
+                APP_STATE.isResuming = true;
+                APP_STATE.session = pending;
+                CoreApp.startReview();
+            }
+        }
     }
 };
 
@@ -360,12 +394,15 @@ const CoreApp = {
                 // 1. Rendu des boîtes
                 CoreApp.renderBoxes();
                 
-                // 2. Rendu des contenus de boîtes (NOUVEAU)
+                // 2. Rendu des contenus de boîtes
                 CoreApp.renderDeckOverview(); 
 
                 status.textContent = `${CoreApp.csvData.length} cartes chargées.`;
                 status.className = "mt-2 w-full text-sm text-green-600";
                 
+                // Mise à jour stats pour voir si une session correspond
+                StatsUI.renderHistory();
+
                 if (APP_STATE.isResuming && APP_STATE.session && APP_STATE.session.deckName === filename) {
                     CoreApp.startReview();
                 }
@@ -404,7 +441,7 @@ const CoreApp = {
         el.classList.add('hidden');
         el.setAttribute('aria-hidden', 'true');
         CoreApp.renderBoxes();
-        CoreApp.renderDeckOverview(); // Mise à jour de l'affichage global
+        CoreApp.renderDeckOverview();
     },
 
     parseCSV: (text) => {
@@ -494,20 +531,16 @@ const CoreApp = {
         });
     },
 
-    // --- NOUVELLE FONCTION D'AFFICHAGE GLOBAL ---
     renderDeckOverview: () => {
         const container = document.getElementById('deck-overview-container');
         if(!container) return;
         
-        container.innerHTML = ''; // Nettoyer
+        container.innerHTML = ''; 
         
-        // On boucle sur toutes les boîtes pour les afficher les unes après les autres
         [1, 2, 3, 4, 5].forEach(boxNum => {
             const cards = CoreApp.csvData.filter(c => c.box === boxNum);
             
-            // On n'affiche que si la boîte contient des cartes
             if (cards.length > 0) {
-                // Section de la boîte
                 const section = document.createElement('div');
                 section.className = 'bg-white rounded-lg shadow-md p-5';
                 
@@ -580,7 +613,6 @@ const CoreApp = {
         document.getElementById('answer-section').classList.add('hidden');
         document.getElementById('show-answer-btn').classList.remove('hidden');
 
-        // NOUVEAU : Reset du bouton radio sur "Normale"
         const normalRadio = document.getElementById('difficulty-normal');
         if(normalRadio) normalRadio.checked = true;
 
