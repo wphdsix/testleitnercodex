@@ -21,19 +21,13 @@
         const folderPath = 'docs';
         const folderPrefix = folderPath.endsWith('/') ? folderPath : `${folderPath}/`;
     
-        // ASTUCE ANTI-CACHE : On ajoute l'heure actuelle à la requête API
-        const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1&timestamp=${Date.now()}`;
+        // ASTUCE ANTI-CACHE : Le timestamp dans l'URL suffit (pas besoin de headers)
+        const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1&t=${Date.now()}`;
         
-        console.log("Tentative de récupération GitHub sur :", treeUrl);
+        console.log("Connexion GitHub :", treeUrl);
 
-        // En-têtes pour forcer le réseau
-        const response = await fetch(treeUrl, { 
-            cache: 'no-store',
-            headers: {
-                'Pragma': 'no-cache',
-                'Cache-Control': 'no-cache'
-            }
-        });
+        // CORRECTION CORS : On retire les headers "Cache-Control" qui bloquent la requête
+        const response = await fetch(treeUrl);
     
         if (!response.ok) {
           throw new Error(`Erreur API GitHub : ${response.status}`);
@@ -49,10 +43,9 @@
           .map(item => {
             const relativePath = item.path.substring(folderPrefix.length);
             const publicPath = item.path.startsWith('docs/') ? item.path.substring(5) : item.path;
-            // On encode proprement les chemins
             const encodedPath = item.path.split('/').map(encodeURIComponent).join('/');
             
-            // On ajoute aussi l'anti-cache sur le lien de téléchargement direct
+            // Lien brut avec anti-cache également
             const downloadUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodedPath}`;
     
             return {
@@ -69,18 +62,17 @@
       function populateCsvSelect(select, csvFiles, { preferredName = null } = {}) {
         if (!select) return;
         
-        // Si le script principal (main.js) est chargé, on utilise sa fonction de tri sophistiquée
         if (window.leitnerApp?.ui?.populateCSVSelector) {
             window.leitnerApp.ui.populateCSVSelector(csvFiles, { selectedName: preferredName });
         } else {
-            // Fallback (si main.js n'est pas encore prêt)
+            // Fallback
             select.innerHTML = '';
             if (!csvFiles.length) {
                 select.innerHTML = '<option value="">Aucun fichier trouvé</option>';
             } else {
                 csvFiles.forEach(file => {
                     const option = document.createElement('option');
-                    option.value = file.download_url; // Important : value = URL
+                    option.value = getNoCacheUrl(file.download_url); // On ajoute l'anti-cache ici aussi
                     option.textContent = file.name;
                     option.dataset.name = file.name;
                     if (file.name === preferredName) option.selected = true;
@@ -95,10 +87,13 @@
         const status = document.getElementById('csv-load-status');
         if (!select) return;
     
-        // Feedback visuel immédiat
+        // Feedback visuel
         select.disabled = true;
-        const savedText = select.options[select.selectedIndex]?.text || "Chargement...";
-        select.innerHTML = '<option>Actualisation depuis GitHub...</option>';
+        const savedText = select.options[select.selectedIndex]?.text;
+        
+        // On ne change le texte que si c'est un chargement manuel (bouton)
+        if(!preserveSelection) select.innerHTML = '<option>Actualisation GitHub...</option>';
+        
         if(status) {
             status.classList.remove('hidden');
             status.textContent = "Connexion à GitHub...";
@@ -106,26 +101,25 @@
         }
     
         try {
-          // 1. Appel API GitHub
           const githubFiles = await fetchCsvFilesFromGitHub();
           
-          // 2. Gestion de la sélection
           const currentVal = window.__leitnerSelectedName;
           const preferredName = preserveSelection ? (currentVal || null) : null;
     
-          // 3. Remplissage
           populateCsvSelect(select, githubFiles, { preferredName });
           
-          // 4. Succès
           if(status) {
-              status.textContent = `${githubFiles.length} fichiers trouvés.`;
+              status.textContent = `✔ ${githubFiles.length} fichiers synchronisés.`;
               status.className = "mt-2 w-full text-sm text-green-600";
-              setTimeout(() => status.classList.add('hidden'), 3000);
+              setTimeout(() => status.classList.add('hidden'), 4000);
           }
 
         } catch (err) {
           console.error('Erreur chargement CSV :', err);
-          select.innerHTML = '<option value="">Erreur de connexion</option>';
+          
+          // En cas d'erreur, on remet une option par défaut
+          if(!preserveSelection) select.innerHTML = '<option value="">Erreur de connexion</option>';
+          
           if(status) {
               status.textContent = "Erreur : Impossible de joindre GitHub.";
               status.className = "mt-2 w-full text-sm text-red-600";
@@ -136,15 +130,12 @@
       }
     
       document.addEventListener('DOMContentLoaded', () => {
-        // Chargement initial
         loadCsvFiles({ preserveSelection: false });
 
-        // Écouteur sur le bouton de rafraîchissement
         document.getElementById('refresh-csv-btn')?.addEventListener('click', () => {
             loadCsvFiles({ preserveSelection: true });
         });
 
-        // Sauvegarde de la sélection pour ne pas la perdre au refresh
         document.getElementById('csv-selector')?.addEventListener('change', (e) => {
             const opt = e.target.options[e.target.selectedIndex];
             if(opt) window.__leitnerSelectedName = opt.dataset.name;
@@ -155,9 +146,7 @@
         const select = document.getElementById('csv-selector');
         const selectedOption = select?.selectedOptions?.[0];
         
-        // On sécurise la récupération de l'URL
         let selectedFile = selectedOption?.value;
-        // Si la value n'est pas une URL (cas du fallback), on cherche dans le dataset
         if (!selectedFile || !selectedFile.startsWith('http')) {
              selectedFile = selectedOption?.dataset?.downloadUrl;
         }
@@ -166,7 +155,9 @@
           alert('Veuillez sélectionner un fichier CSV valide.');
           return;
         }
-        const url = `import-export.html?csv=${encodeURIComponent(selectedFile)}`;
+        // On nettoie l'URL pour l'éditeur (pas besoin du timestamp ici)
+        const cleanUrl = selectedFile.split('?')[0];
+        const url = `import-export.html?csv=${encodeURIComponent(cleanUrl)}`;
         window.open(url, '_blank', 'noopener,noreferrer');
       }
     </script>
