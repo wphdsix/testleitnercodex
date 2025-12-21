@@ -1,12 +1,12 @@
 /**
  * LEITNER SYSTEM - MAIN LOGIC
- * Version: 3.5 (Fix Clic Historique + Stats Difficulté)
+ * Version: 3.6 (Multi-Sessions & Reprise Ciblée)
  */
 
 // --- CONSTANTES ---
 const STORAGE_KEYS = {
-    SESSION: 'leitner_active_session',
-    HISTORY: 'leitner_session_history',
+    // On utilise une nouvelle clé pour stocker la liste complète des sessions
+    ALL_SESSIONS: 'leitner_sessions_list', 
     CONFIG: 'leitner_config',
     CARD_STATE: 'leitner_card_state'
 };
@@ -15,12 +15,11 @@ const BOX_INTERVALS = { 1: 1, 2: 3, 3: 7, 4: 14, 5: 30 };
 
 const APP_STATE = {
     currentDeck: [],
-    session: null,
-    isResuming: false,
+    session: null, // La session actuellement jouée
     config: { owner: 'leitexper1', repo: 'testleitnercodex', branch: 'main', path: 'docs/' }
 };
 
-// --- 1. PERSISTANCE (Ajout de la difficulté) ---
+// --- 1. PERSISTANCE DES CARTES (Boîte & Date) ---
 
 const CardPersistence = {
     getStoredState: (filename) => {
@@ -32,10 +31,7 @@ const CardPersistence = {
     updateCard: (filename, cardId, box, lastReview, difficulty) => {
         const allStates = JSON.parse(localStorage.getItem(STORAGE_KEYS.CARD_STATE) || '{}');
         if (!allStates[filename]) allStates[filename] = {};
-        
-        // On sauvegarde tout
         allStates[filename][cardId] = { box, lastReview, difficulty };
-        
         localStorage.setItem(STORAGE_KEYS.CARD_STATE, JSON.stringify(allStates));
     },
 
@@ -44,11 +40,11 @@ const CardPersistence = {
         csvData.forEach(card => {
             const state = stored[card.id];
             if (state) {
-                if (typeof state === 'number') card.box = state; // Migration
+                if (typeof state === 'number') card.box = state;
                 else {
                     if (state.box) card.box = state.box;
                     if (state.lastReview) card.lastReview = state.lastReview;
-                    if (state.difficulty) card.difficulty = state.difficulty; // Nouveau
+                    if (state.difficulty) card.difficulty = state.difficulty;
                 }
             }
         });
@@ -189,28 +185,57 @@ window.leitnerApp = window.leitnerApp || {};
 window.leitnerApp.ui = window.leitnerApp.ui || {};
 window.leitnerApp.ui.populateCSVSelector = UI.populateCSVSelector;
 
-// --- 3. GESTION DE SESSION ---
+// --- 3. GESTION DES SESSIONS (Nouveau Système Multi-Sessions) ---
 
 const SessionManager = {
+    // Récupérer toutes les sessions
+    getAll: () => {
+        return JSON.parse(localStorage.getItem(STORAGE_KEYS.ALL_SESSIONS) || '[]');
+    },
+
+    // Créer une nouvelle session
     start: (deckName, cards) => {
-        const session = {
-            id: Date.now(),
+        const newSession = {
+            id: Date.now(), // Identifiant unique
             deckName: deckName,
             totalCards: cards.length,
             cardsQueue: cards.map((c) => c.id),
             currentIndex: 0,
-            stats: { correct: 0, wrong: 0, startTime: Date.now() }
+            stats: { correct: 0, wrong: 0 },
+            startTime: new Date().toISOString(),
+            lastUpdate: new Date().toISOString(),
+            status: 'active' // 'active' ou 'completed'
         };
-        APP_STATE.session = session;
-        SessionManager.save();
-        return session;
+
+        const sessions = SessionManager.getAll();
+        sessions.unshift(newSession); // Ajouter au début
+        localStorage.setItem(STORAGE_KEYS.ALL_SESSIONS, JSON.stringify(sessions));
+        
+        APP_STATE.session = newSession;
+        return newSession;
     },
 
-    save: () => {
-        if (APP_STATE.session) {
-            localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(APP_STATE.session));
-            StatsUI.renderHistory();
+    // Sauvegarder l'état de la session en cours dans la liste
+    updateCurrent: () => {
+        if (!APP_STATE.session) return;
+        
+        APP_STATE.session.lastUpdate = new Date().toISOString();
+        
+        // Si fini
+        if (APP_STATE.session.currentIndex >= APP_STATE.session.totalCards) {
+            APP_STATE.session.status = 'completed';
         }
+
+        const sessions = SessionManager.getAll();
+        const index = sessions.findIndex(s => s.id === APP_STATE.session.id);
+        
+        if (index !== -1) {
+            sessions[index] = APP_STATE.session;
+            localStorage.setItem(STORAGE_KEYS.ALL_SESSIONS, JSON.stringify(sessions));
+        }
+        
+        // Mettre à jour l'UI stats si elle est visible
+        StatsUI.renderHistory();
     },
 
     recordResult: (isCorrect) => {
@@ -218,44 +243,49 @@ const SessionManager = {
         if (isCorrect) APP_STATE.session.stats.correct++;
         else APP_STATE.session.stats.wrong++;
         APP_STATE.session.currentIndex++;
-        SessionManager.save();
+        
+        SessionManager.updateCurrent();
     },
 
-    pauseAndExit: () => {
-        CoreApp.closeFlashcard();
-        alert("Session mise en pause. Retrouvez-la dans l'onglet Statistiques.");
+    // Reprendre une session spécifique depuis l'historique
+    resumeById: (sessionId) => {
+        const sessions = SessionManager.getAll();
+        const sessionToResume = sessions.find(s => s.id === parseInt(sessionId));
+        
+        if (sessionToResume) {
+            // Vérifier si le fichier est chargé
+            if (CoreApp.csvData.length === 0 || CoreApp.csvData.filename !== sessionToResume.deckName) {
+                if(confirm(`Pour reprendre cette session, il faut charger le fichier "${sessionToResume.deckName}". Voulez-vous aller à l'onglet Révision ?`)) {
+                    document.getElementById('tab-review-trigger').click();
+                    // On ne peut pas charger automatiquement car c'est une action utilisateur sur le select
+                    alert(`Veuillez sélectionner "${sessionToResume.deckName}" dans la liste, puis revenez cliquer sur la session.`);
+                }
+                return;
+            }
+
+            // Tout est bon, on charge
+            APP_STATE.session = sessionToResume;
+            document.getElementById('tab-review-trigger').click();
+            CoreApp.startReview();
+        } else {
+            alert("Session introuvable.");
+        }
     },
 
-    complete: () => {
-        if (!APP_STATE.session) return;
-        const history = JSON.parse(localStorage.getItem(STORAGE_KEYS.HISTORY) || '[]');
-        const s = APP_STATE.session;
-        const entry = {
-            date: new Date().toISOString(),
-            deck: s.deckName,
-            score: `${s.stats.correct}/${s.totalCards}`,
-            percent: Math.round((s.stats.correct / s.totalCards) * 100),
-            duration: Math.round((Date.now() - s.stats.startTime) / 1000)
-        };
-        history.unshift(entry);
-        localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(history));
-        localStorage.removeItem(STORAGE_KEYS.SESSION);
-        APP_STATE.session = null;
+    deleteSession: (sessionId) => {
+        let sessions = SessionManager.getAll();
+        sessions = sessions.filter(s => s.id !== parseInt(sessionId));
+        localStorage.setItem(STORAGE_KEYS.ALL_SESSIONS, JSON.stringify(sessions));
         StatsUI.renderHistory();
     },
-
-    loadPending: () => {
-        const json = localStorage.getItem(STORAGE_KEYS.SESSION);
-        return json ? JSON.parse(json) : null;
-    },
-
-    discard: () => {
-        localStorage.removeItem(STORAGE_KEYS.SESSION);
+    
+    deleteAll: () => {
+        localStorage.removeItem(STORAGE_KEYS.ALL_SESSIONS);
         StatsUI.renderHistory();
     }
 };
 
-// --- 4. STATISTIQUES ---
+// --- 4. STATISTIQUES (Liste interactive) ---
 
 const StatsUI = {
     init: () => {
@@ -263,52 +293,50 @@ const StatsUI = {
         StatsUI.renderDifficultyStats();
         
         document.getElementById('btn-clear-history')?.addEventListener('click', () => {
-            if(confirm('Tout effacer ?')) {
-                localStorage.removeItem(STORAGE_KEYS.HISTORY);
-                StatsUI.renderHistory();
-            }
+            if(confirm('Tout effacer ?')) SessionManager.deleteAll();
         });
         
-        // FIX CLIC HISTORIQUE : Utilisation de l'Event Delegation sur la liste
+        // Gestionnaire de clics sur la liste (Event Delegation)
         const historyList = document.getElementById('stats-history-list');
         if (historyList) {
             historyList.addEventListener('click', (e) => {
+                // Gestion du bouton suppression (croix)
+                if (e.target.classList.contains('delete-session-btn')) {
+                    e.stopPropagation();
+                    const id = e.target.dataset.id;
+                    if(confirm("Supprimer cette entrée ?")) SessionManager.deleteSession(id);
+                    return;
+                }
+
                 const li = e.target.closest('li');
                 if (!li) return;
 
-                // Mode reprise
-                if (li.dataset.action === 'resume') {
-                    StatsUI.resumePending();
-                } 
-                // Mode info (historique terminé)
-                else if (li.dataset.action === 'info') {
-                    alert(li.dataset.info || 'Session terminée');
+                const id = li.dataset.id;
+                const status = li.dataset.status;
+
+                if (status === 'active') {
+                    SessionManager.resumeById(id);
+                } else {
+                    alert("Cette session est terminée. Pour rejouer ce paquet, sélectionnez-le dans l'onglet Révision.");
                 }
             });
         }
         
+        // Cacher le vieux bloc "resume-area" s'il existe
         const oldResume = document.getElementById('resume-area');
         if(oldResume) oldResume.classList.add('hidden');
     },
 
-    // NOUVEAU : Calcul des statistiques de difficulté
     renderDifficultyStats: () => {
         if (!CoreApp.csvData || CoreApp.csvData.length === 0) {
-            // Reset à 0 si rien n'est chargé
-            ['easy', 'normal', 'hard'].forEach(diff => {
-                document.getElementById(`stat-count-${diff}`).textContent = '0';
-            });
+            ['easy', 'normal', 'hard'].forEach(diff => document.getElementById(`stat-count-${diff}`).textContent = '0');
             return;
         }
-
         let counts = { easy: 0, normal: 0, hard: 0 };
-        
         CoreApp.csvData.forEach(card => {
             const diff = card.difficulty || 'normal';
-            if (counts[diff] !== undefined) counts[diff]++;
-            else counts['normal']++; // fallback
+            if (counts[diff] !== undefined) counts[diff]++; else counts['normal']++;
         });
-
         document.getElementById('stat-count-easy').textContent = counts.easy;
         document.getElementById('stat-count-normal').textContent = counts.normal;
         document.getElementById('stat-count-hard').textContent = counts.hard;
@@ -318,90 +346,82 @@ const StatsUI = {
         const list = document.getElementById('stats-history-list');
         if(!list) return;
 
-        const history = JSON.parse(localStorage.getItem(STORAGE_KEYS.HISTORY) || '[]');
-        const pending = SessionManager.loadPending();
+        const sessions = SessionManager.getAll();
         
-        let html = '';
-        
-        if (pending && pending.currentIndex < pending.totalCards) {
-            const dateObj = new Date(pending.stats.startTime);
-            const dateStr = dateObj.toLocaleDateString('fr-FR', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'});
-            const remaining = pending.totalCards - pending.currentIndex;
-            
-            // Note: Ajout de data-action="resume" pour le clic
-            html += `
-            <li data-action="resume" class="cursor-pointer hover:bg-blue-100 transition p-3 bg-blue-50 rounded border-l-4 border-blue-600 mb-2 shadow-sm">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <strong class="text-blue-900 text-sm block">▶️ ${pending.deckName} (En cours)</strong>
-                        <span class="text-xs text-blue-700">${dateStr}</span>
-                    </div>
-                    <div class="text-right">
-                        <span class="block font-bold text-blue-800">${remaining} à voir</span>
-                        <span class="text-xs text-blue-600">sur ${pending.totalCards}</span>
-                    </div>
-                </div>
-            </li>`;
-        }
-
-        if (history.length === 0 && !pending) {
-            list.innerHTML = '<li class="p-4 text-center text-gray-500 italic">Aucune session.</li>';
+        if (sessions.length === 0) {
+            list.innerHTML = '<li class="p-4 text-center text-gray-500 italic">Historique vide.</li>';
+            document.getElementById('stat-total-reviewed').textContent = '0';
+            document.getElementById('stat-success-rate').textContent = '0%';
+            document.getElementById('stat-streak').textContent = '0';
             return;
         }
 
+        let html = '';
         let totalCards = 0;
         let totalCorrect = 0;
+        let finishedCount = 0;
 
-        history.forEach((h) => {
-            const dateObj = new Date(h.date);
+        sessions.forEach((s) => {
+            const dateObj = new Date(s.lastUpdate);
             const dateStr = dateObj.toLocaleDateString('fr-FR', {day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit'});
-            const [correct, total] = h.score.split('/').map(Number);
-            totalCards += total;
-            totalCorrect += correct;
+            
+            // Calculs globaux
+            if (s.status === 'completed') {
+                totalCards += s.totalCards;
+                totalCorrect += s.stats.correct;
+                finishedCount++;
+            }
 
-            const borderClass = h.percent >= 80 ? 'border-green-500' : (h.percent >= 50 ? 'border-yellow-500' : 'border-red-400');
-            const scoreColor = h.percent >= 80 ? 'text-green-700' : 'text-yellow-700';
+            // Affichage spécifique selon l'état
+            if (s.status === 'active') {
+                const remaining = s.totalCards - s.currentIndex;
+                html += `
+                <li data-id="${s.id}" data-status="active" class="cursor-pointer hover:bg-blue-50 transition p-3 bg-white rounded border-l-4 border-blue-500 mb-2 shadow-sm group relative">
+                    <button class="delete-session-btn absolute top-2 right-2 text-gray-300 hover:text-red-500 hidden group-hover:block" data-id="${s.id}">✕</button>
+                    <div class="flex justify-between items-center pr-4">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="animate-pulse w-2 h-2 bg-blue-500 rounded-full"></span>
+                                <strong class="text-blue-900 text-sm block">${s.deckName}</strong>
+                            </div>
+                            <span class="text-xs text-gray-500 block mt-1">Dernière activité : ${dateStr}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="block font-bold text-blue-600">${remaining} à voir</span>
+                            <span class="text-xs text-gray-400">sur ${s.totalCards}</span>
+                        </div>
+                    </div>
+                </li>`;
+            } else {
+                // Session terminée
+                const percent = Math.round((s.stats.correct / s.totalCards) * 100) || 0;
+                const scoreColor = percent >= 80 ? 'text-green-600' : (percent >= 50 ? 'text-yellow-600' : 'text-red-600');
+                const borderColor = percent >= 80 ? 'border-green-500' : (percent >= 50 ? 'border-yellow-500' : 'border-red-400');
 
-            // Note: Ajout de data-action="info"
-            html += `
-            <li data-action="info" data-info="Session terminée le ${dateStr}. Score : ${h.score}" class="cursor-pointer hover:bg-gray-100 transition p-3 bg-white rounded border-l-4 ${borderClass} mb-2 shadow-sm">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <strong class="text-gray-800 text-sm block">${h.deck}</strong>
-                        <span class="text-xs text-gray-500">${dateStr}</span>
+                html += `
+                <li data-id="${s.id}" data-status="completed" class="cursor-pointer hover:bg-gray-50 transition p-3 bg-white rounded border-l-4 ${borderColor} mb-2 shadow-sm group relative opacity-75 hover:opacity-100">
+                    <button class="delete-session-btn absolute top-2 right-2 text-gray-300 hover:text-red-500 hidden group-hover:block" data-id="${s.id}">✕</button>
+                    <div class="flex justify-between items-center pr-4">
+                        <div>
+                            <strong class="text-gray-700 text-sm block">${s.deckName}</strong>
+                            <span class="text-xs text-gray-400 block mt-1">${dateStr}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="block font-bold ${scoreColor}">${percent}%</span>
+                            <span class="text-xs text-gray-400">Terminé</span>
+                        </div>
                     </div>
-                    <div class="text-right">
-                        <span class="block font-bold ${scoreColor}">Terminé</span>
-                        <span class="text-xs text-gray-400">Score: ${h.score}</span>
-                    </div>
-                </div>
-            </li>`;
+                </li>`;
+            }
         });
 
         list.innerHTML = html;
 
+        // Mise à jour des badges
         document.getElementById('stat-total-reviewed').textContent = totalCards;
         const globalRate = totalCards > 0 ? Math.round((totalCorrect / totalCards) * 100) : 0;
         document.getElementById('stat-success-rate').textContent = globalRate + '%';
-        document.getElementById('stat-streak').textContent = history.length;
-    },
-
-    resumePending: () => {
-        const pending = SessionManager.loadPending();
-        if (pending) {
-            // Vérification si le bon CSV est chargé
-            if(CoreApp.csvData.length === 0 || CoreApp.csvData.filename !== pending.deckName) {
-                if(confirm(`Le fichier "${pending.deckName}" doit être chargé. Aller à l'onglet Révision ?`)) {
-                    document.getElementById('tab-review-trigger').click();
-                }
-            } else {
-                document.getElementById('tab-review-trigger').click();
-                APP_STATE.isResuming = true;
-                APP_STATE.session = pending;
-                // IMPORTANT : Forcer l'affichage de la carte
-                CoreApp.startReview();
-            }
-        }
+        document.getElementById('stat-streak').textContent = finishedCount;
     }
 };
 
@@ -438,18 +458,13 @@ const CoreApp = {
 
                 CoreApp.renderBoxes();
                 CoreApp.renderDeckOverview(); 
-                
-                // Mise à jour des stats de difficulté dès le chargement
                 StatsUI.renderDifficultyStats();
 
                 status.textContent = `${CoreApp.csvData.length} cartes chargées.`;
                 status.className = "mt-2 w-full text-sm text-green-600";
                 
+                // Mettre à jour l'historique pour afficher les sessions actives possibles
                 StatsUI.renderHistory();
-
-                if (APP_STATE.isResuming && APP_STATE.session && APP_STATE.session.deckName === filename) {
-                    CoreApp.startReview();
-                }
 
             } catch (err) {
                 console.error(err);
@@ -486,7 +501,9 @@ const CoreApp = {
         el.setAttribute('aria-hidden', 'true');
         CoreApp.renderBoxes();
         CoreApp.renderDeckOverview();
-        StatsUI.renderDifficultyStats(); // Rafraîchir les stats
+        StatsUI.renderDifficultyStats();
+        // Feedback session sauvegardée
+        StatsUI.renderHistory();
     },
 
     parseCSV: (text) => {
@@ -613,7 +630,6 @@ const CoreApp = {
                         dateInfo = `<span class="text-xs text-gray-400 block mt-1">Vu : ${d.toLocaleDateString()} ${d.toLocaleTimeString()}</span>`;
                     }
 
-                    // Badge difficulté
                     let diffBadge = '';
                     if (card.difficulty) {
                         const colors = { easy: 'text-green-600', normal: 'text-blue-600', hard: 'text-red-600' };
@@ -644,8 +660,8 @@ const CoreApp = {
         if (!APP_STATE.session) return;
         const s = APP_STATE.session;
         if (s.currentIndex >= s.totalCards) {
+            SessionManager.updateCurrent(); // Marquer comme terminé
             alert(`Fin de session ! Score: ${s.stats.correct}/${s.totalCards}`);
-            SessionManager.complete();
             CoreApp.closeFlashcard();
             return;
         }
@@ -666,7 +682,6 @@ const CoreApp = {
         document.getElementById('answer-section').classList.add('hidden');
         document.getElementById('show-answer-btn').classList.remove('hidden');
 
-        // Reset radio button to default 'normal'
         const normalRadio = document.getElementById('difficulty-normal');
         if(normalRadio) normalRadio.checked = true;
 
@@ -678,7 +693,15 @@ const CoreApp = {
         quitBtn.id = 'temp-quit-btn';
         quitBtn.textContent = "⏹ Quitter & Sauvegarder";
         quitBtn.className = "mb-4 text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded w-full md:w-auto";
-        quitBtn.onclick = SessionManager.pauseAndExit;
+        quitBtn.onclick = () => {
+            CoreApp.closeFlashcard();
+            // Petite notification
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-4 right-4 bg-blue-600 text-white px-4 py-2 rounded shadow-lg z-50';
+            toast.textContent = "Session sauvegardée dans l'onglet Statistiques";
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        };
         qSection.parentNode.insertBefore(quitBtn, qSection);
 
         let qHtml = `<p class="text-xl">${card.question || '...'}</p>`;
@@ -708,7 +731,6 @@ const CoreApp = {
                 newBox = 1;
             }
 
-            // Récupération de la difficulté choisie
             const difficultyInput = document.querySelector('input[name="difficulty"]:checked');
             const difficulty = difficultyInput ? difficultyInput.value : 'normal';
 
@@ -716,7 +738,6 @@ const CoreApp = {
             card.lastReview = new Date().toISOString(); 
             card.difficulty = difficulty;
 
-            // Sauvegarde complète (Box, Date, Difficulté)
             CardPersistence.updateCard(CoreApp.csvData.filename, cardId, newBox, card.lastReview, difficulty);
             
             const feedback = document.createElement('div');
