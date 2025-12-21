@@ -640,15 +640,52 @@
 
             <section id="tab-stats" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-stats-trigger" data-tab-panel="stats">
                 <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-2xl font-bold mb-4">Tableau de bord des statistiques</h2>
-                    <p class="text-gray-600 mb-6">Analysez vos sessions de révision, suivez votre progression et identifiez vos tendances d'apprentissage.</p>
-                    <button type="button" class="stats-modal__trigger mb-6" data-open-stats>
-                        📊 Statistiques
-                    </button>
-                    <div data-component="statistics-dashboard" class="statistics-dashboard__container"></div>
+                    <h2 class="text-2xl font-bold mb-6">Tableau de bord</h2>
+
+                    <div id="resume-area" class="hidden mb-8 bg-blue-50 border-l-4 border-blue-500 p-4 rounded shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div>
+                            <h3 class="font-bold text-blue-800 text-lg">Session interrompue détectée</h3>
+                            <p class="text-blue-700">Il vous reste <strong id="resume-count">0</strong> cartes à voir dans votre session précédente.</p>
+                            <p class="text-xs text-blue-500 mt-1" id="resume-deck-name"></p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="btn-discard-session" class="px-4 py-2 text-red-500 hover:text-red-700 text-sm font-semibold">
+                                Abandonner
+                            </button>
+                            <button id="btn-resume-session" class="px-6 py-2 bg-blue-600 text-white font-bold rounded-full hover:bg-blue-700 shadow-lg transition transform hover:-translate-y-1">
+                                ▶️ Reprendre
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="statistics-dashboard__summary mb-8">
+                        <div class="progress-badge progress-badge--primary">
+                            <span class="progress-badge__value" id="stat-total-reviewed">0</span>
+                            <span class="progress-badge__label">Cartes révisées aujourd'hui</span>
+                        </div>
+                        <div class="progress-badge progress-badge--success">
+                            <span class="progress-badge__value" id="stat-success-rate">0%</span>
+                            <span class="progress-badge__label">Taux de réussite</span>
+                        </div>
+                        <div class="progress-badge progress-badge--warning">
+                            <span class="progress-badge__value" id="stat-streak">0</span>
+                            <span class="progress-badge__label">Série actuelle</span>
+                        </div>
+                    </div>
+
+                    <div class="statistics-dashboard__panel">
+                        <div class="flex justify-between items-center mb-4 border-b pb-2">
+                            <h3 class="text-lg font-bold text-gray-700">Historique des sessions</h3>
+                            <button id="btn-clear-history" class="text-sm text-red-500 hover:text-red-700 underline cursor-pointer">
+                                Effacer l'historique
+                            </button>
+                        </div>
+                        <ul id="stats-history-list" class="stats-history max-h-64 overflow-y-auto">
+                            <li class="p-4 text-center text-gray-500 italic">Aucune session terminée pour le moment.</li>
+                        </ul>
+                    </div>
                 </div>
             </section>
-
         </div>
 
         <div id="import-export-modal" class="hidden import-export-modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="import-export-title">
