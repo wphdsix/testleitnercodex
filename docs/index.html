@@ -132,9 +132,7 @@
       document.addEventListener('DOMContentLoaded', () => {
         loadCsvFiles({ preserveSelection: false });
 
-        document.getElementById('refresh-csv-btn')?.addEventListener('click', () => {
-            loadCsvFiles({ preserveSelection: true });
-        });
+
 
         document.getElementById('csv-selector')?.addEventListener('change', (e) => {
             const opt = e.target.options[e.target.selectedIndex];
@@ -205,9 +203,6 @@
                             <select id="csv-selector" class="p-2 border rounded w-full md:min-w-[300px]">
                                 <option value="">Initialisation...</option>
                             </select>
-                            <button id="refresh-csv-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded border border-gray-300" title="Forcer la mise à jour depuis GitHub">
-                                🔄
-                            </button>
                         </div>
                     </div>
                 </div>
