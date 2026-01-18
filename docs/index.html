@@ -455,17 +455,87 @@
         <div id="github-guide-modal" class="hidden fixed inset-0 flex items-center justify-center p-5 z-50 bg-black bg-opacity-50" role="dialog" aria-modal="true" aria-labelledby="github-guide-title" aria-hidden="true" tabindex="-1">
             <div class="github-guide__dialog" role="document">
                 <div class="github-guide__header">
-                    <h3 id="github-guide-title" class="text-xl font-bold">Comprendre et configurer son GitHub personnel</h3>
+                    <h3 id="github-guide-title" class="text-xl font-bold">🎓 De Zéro à Héros : Créez votre propre site</h3>
                     <button id="close-github-guide" class="github-guide__close" aria-label="Fermer le guide">
                         ✕
                     </button>
                 </div>
                 <div class="github-guide__body">
-                    <p class="github-guide__intro">
-                        Ce guide détaille pas à pas la création de votre compte GitHub, la connexion, la réalisation d'un fork du projet et la configuration des champs ci-dessus. Chaque étape est pensée pour un public débutant : prenez votre temps, suivez l'ordre proposé et insérez vos propres captures dans les emplacements prévus pour conserver un mémo visuel.
-                    </p>
+                    <div class="space-y-6 text-gray-700 text-sm md:text-base">
+                        <p class="italic text-gray-600 border-l-4 border-yellow-400 pl-3">
+                            Pas de panique ! Vous n'avez besoin d'aucune connaissance en code. Suivez simplement ces 5 étapes comme une recette de cuisine pour avoir votre propre application de révision.
+                        </p>
+
+                        <section>
+                            <h4 class="font-bold text-lg text-purple-600 mb-2">Étape 1 : Le Passeport (Compte GitHub) 🆔</h4>
+                            <p>GitHub est le site qui va héberger vos cartes gratuitement. C'est votre "disque dur" sur internet.</p>
+                            <ol class="list-decimal list-inside ml-2 mt-1 space-y-1 bg-purple-50 p-2 rounded">
+                                <li>Allez sur <a href="https://github.com/signup" target="_blank" class="text-blue-600 underline font-bold">github.com</a>.</li>
+                                <li>Cliquez sur <strong>"Sign up"</strong> et créez votre compte (c'est gratuit).</li>
+                                <li>Validez votre email. C'est la base de tout !</li>
+                            </ol>
+                        </section>
+
+                        <section>
+                            <h4 class="font-bold text-lg text-purple-600 mb-2">Étape 2 : La Copie (Le Fork) 🍴</h4>
+                            <p>Vous ne pouvez pas modifier MON site, mais vous pouvez en faire une copie pour VOUS.</p>
+                            <ol class="list-decimal list-inside ml-2 mt-1 space-y-1 bg-purple-50 p-2 rounded">
+                                <li>Connectez-vous à GitHub.</li>
+                                <li>Allez sur mon projet : <a href="https://github.com/leitexper1/testleitnercodex" target="_blank" class="text-blue-600 underline font-bold">leitexper1/testleitnercodex</a>.</li>
+                                <li>En haut à droite, cherchez le bouton <strong>"Fork"</strong> et cliquez dessus.</li>
+                                <li>Cliquez sur "Create fork".</li>
+                                <li><strong>Important :</strong> Vous êtes maintenant sur <em>votre</em> page projet (votre copie). Gardez cet onglet ouvert ou mettez-le en favori. C'est ici que vous déposerez vos fichiers plus tard.</li>
+                            </ol>
+                        </section>
+
+                        <section>
+                            <h4 class="font-bold text-lg text-blue-600 mb-2">Étape 3 : La Fabrication (Local) 🛠️</h4>
+                            <p>Revenez sur <strong>cette page</strong> (l'outil où vous lisez ce guide). Vous allez travailler "localement" dans votre navigateur pour créer le contenu.</p>
+                            <ol class="list-decimal list-inside ml-2 mt-1 space-y-1 bg-blue-50 p-2 rounded">
+                                <li>Fermez ce guide et cliquez sur <strong>"Import / Export avancé"</strong>.</li>
+                                <li>Créez vos cartes (Questions/Réponses/Images).</li>
+                                <li>Cliquez sur <strong>"Exporter en CSV"</strong>.</li>
+                                <li>Le fichier se télécharge <strong>sur votre ordinateur</strong> (dossier Téléchargements). C'est votre "cartouche" de jeu.</li>
+                                <li>Renommez ce fichier (ex: <code>HISTOIRE_Rome.csv</code>) pour bien l'identifier.</li>
+                            </ol>
+                        </section>
+
+                        <section>
+                            <h4 class="font-bold text-lg text-red-600 mb-2">Étape 4 : Préparation sur votre ordinateur 📂</h4>
+                            <p>Avant d'envoyer quoi que ce soit, organisez vos fichiers sur votre ordinateur en respectant <strong>scrupuleusement</strong> cette structure :</p>
+                            <div class="bg-gray-100 p-3 rounded border-l-4 border-red-500 font-mono text-sm mt-2">
+                                docs/ <span class="text-gray-500 italic">(Dossier principal)</span><br>
+                                ├── HISTOIRE_Rome.csv <span class="text-blue-600 font-bold">(CATEGORIE_Nom.csv)</span><br>
+                                ├── ELECTRO_Triphase.csv(pas d'accents<br>
+                                ├── images_questions/ <span class="text-gray-500 italic">(Dossier OBLIGATOIRE)</span><br>
+                                │   └── chat.jpg<br>
+                                └── images_reponses/ <span class="text-gray-500 italic">(Dossier OBLIGATOIRE)</span><br>
+                                    └── chien.jpg
+                            </div>
+                            <div class="mt-3 bg-yellow-50 p-2 rounded border border-yellow-200 text-sm">
+                                <strong>💡 Astuce de génie pour les catégories :</strong><br>
+                                Pour créer des dossiers dans le menu, utilisez le tiret du bas <code>_</code> dans le nom du fichier.<br>
+                                • <code>HISTOIRE_questions_blabla.csv</code> se rangera dans <strong>HISTOIRE</strong><br>
+                                • <code>ELECTRO_quest_triphas.csv</code> se rangera dans <strong>ELECTRO</strong>
+                            </div>
+                            <p class="text-xs text-red-500 mt-2 font-bold">⚠️ Règle d'or : Pas d'espaces, pas d'accents, pas de caractères spéciaux (comme :) dans les noms de fichiers !</p>
+                        </section>
+
+                        <section>
+                            <h4 class="font-bold text-lg text-green-600 mb-2">Étape 5 : La Livraison (Vers le Fork) 🚀</h4>
+                            <p>Il faut maintenant envoyer votre fichier (qui est sur votre ordinateur) vers votre site (votre Fork GitHub).</p>
+                            <ol class="list-decimal list-inside ml-2 mt-1 space-y-1 bg-green-50 p-2 rounded">
+                                <li>Retournez sur l'onglet GitHub de <strong>votre projet</strong> (créé à l'étape 2).</li>
+                                <li>Cliquez sur le dossier <strong>docs</strong> dans la liste des fichiers.</li>
+                                <li>En haut à droite, cliquez sur <strong>"Add file"</strong> puis <strong>"Upload files"</strong>.</li>
+                                <li>Glissez votre fichier CSV (et vos dossiers d'images si besoin) depuis votre ordinateur vers la zone grise.</li>
+                                <li>Validez en cliquant sur le bouton vert <strong>"Commit changes"</strong>.</li>
+                            </ol>
+                            <p class="mt-2 font-bold text-green-700">Bravo ! Votre site personnel va détecter ce nouveau fichier et l'ajoutera automatiquement à la liste des paquets disponibles.</p>
+                        </section>
+                    </div>
                     <footer class="github-guide__footer">
-                        <p>Besoin d'un rappel rapide&nbsp;? Revenez à tout moment sur ce guide en cliquant sur <strong>📘 Explication du processus</strong> dans la section de configuration.</p>
+                        <p class="mt-4 text-center text-gray-500 text-xs">Besoin de revoir ce guide ? Cliquez sur "🧭 Guide pour débutant" à tout moment.</p>
                     </footer>
                 </div>
             </div>
