@@ -170,7 +170,7 @@ const UI = {
             if (cleanName.includes('_')) {
                 const parts = cleanName.split('_');
                 const category = parts[0];
-                const label = parts.slice(1).join(' ');
+                const label = parts.slice(1).join('_');
                 if (!groups[category]) groups[category] = [];
                 groups[category].push({ file, label });
             } else {
@@ -519,6 +519,11 @@ const CoreApp = {
         document.getElementById('right-answer').addEventListener('click', () => CoreApp.handleAnswer(true));
         document.getElementById('wrong-answer').addEventListener('click', () => CoreApp.handleAnswer(false));
         
+        document.getElementById('edit-card-btn')?.addEventListener('click', () => CoreApp.openEditor());
+        document.getElementById('delete-card-btn')?.addEventListener('click', () => CoreApp.deleteCard());
+        document.getElementById('cancel-edit')?.addEventListener('click', () => CoreApp.closeEditor());
+        document.getElementById('card-form')?.addEventListener('submit', (e) => CoreApp.saveCard(e));
+
         document.querySelectorAll('.modal .close, .flashcard-container, #admin-panel, #github-guide-modal').forEach(el => {
             el.addEventListener('click', (e) => {
                 if(e.target === el || e.target.classList.contains('close')) {
@@ -555,15 +560,40 @@ const CoreApp = {
                 val = val ? val.trim() : '';
                 matches.push(val);
             }
-            return {
-                id: index,
-                question: matches[0] || 'Question vide',
-                qImage: matches[1] || '',
-                answer: matches[2] || 'Réponse vide',
-                aImage: matches[3] || '',
-                box: parseInt(matches[4]) || 1, 
-                lastReview: matches[5] || ''
-            };
+            
+            // Logique robuste pour gérer les CSV mal formés (virgules dans les réponses)
+            // et les numéros de boîte hors limites (ex: 200 -> 1)
+            let question = matches[0] || 'Question vide';
+            let qImage = matches[1] || '';
+            let answer = '';
+            let aImage = '';
+            let box = 1;
+            let lastReview = '';
+
+            if (matches.length >= 6) {
+                // On part de la fin pour récupérer les champs fixes (Date et Boîte sont toujours à la fin)
+                lastReview = matches[matches.length - 1];
+                
+                const rawBox = parseInt(matches[matches.length - 2]);
+                // Force la boîte entre 1 et 5, sinon 1 (corrige le problème des boîtes 200+)
+                box = (!isNaN(rawBox) && rawBox >= 1 && rawBox <= 5) ? rawBox : 1;
+                
+                aImage = matches[matches.length - 3];
+                
+                // Tout ce qui est entre l'image question et l'image réponse est la réponse
+                // (permet de gérer les virgules qui auraient scindé la réponse en plusieurs colonnes)
+                const answerParts = matches.slice(2, matches.length - 3);
+                answer = answerParts.join(', ') || 'Réponse vide';
+            } else {
+                // Fallback standard si moins de colonnes que prévu
+                answer = matches[2] || 'Réponse vide';
+                aImage = matches[3] || '';
+                const rawBox = parseInt(matches[4]);
+                box = (!isNaN(rawBox) && rawBox >= 1 && rawBox <= 5) ? rawBox : 1;
+                lastReview = matches[5] || '';
+            }
+
+            return { id: index, question, qImage, answer, aImage, box, lastReview };
         });
     },
 
@@ -682,7 +712,7 @@ const CoreApp = {
                         diffBadge = `<span class="text-xs ${colors[card.difficulty] || 'text-gray-500'} font-bold ml-2">(${labels[card.difficulty] || ''})</span>`;
                     }
 
-                    cardEl.innerHTML = `${imgHtml}<div class="flex-1 min-w-0"><p class="font-semibold text-gray-800 truncate" title="${card.question}">${card.question}</p><p class="text-gray-500 truncate" title="${card.answer}">${card.answer}</p>${dateInfo} ${diffBadge}</div>`;
+                    cardEl.innerHTML = `${imgHtml}<div class="flex-1 min-w-0"><p class="font-semibold text-gray-800 break-words whitespace-pre-wrap" title="${card.question}">${card.question}</p><p class="text-gray-500 break-words whitespace-pre-wrap" title="${card.answer}">${card.answer}</p>${dateInfo} ${diffBadge}</div>`;
                     grid.appendChild(cardEl);
                 });
                 
@@ -748,12 +778,12 @@ const CoreApp = {
         };
         qSection.parentNode.insertBefore(quitBtn, qSection);
 
-        let qHtml = `<p class="text-xl">${card.question || '...'}</p>`;
+        let qHtml = `<p class="text-xl break-words whitespace-pre-wrap">${card.question || '...'}</p>`;
         const qImgUrl = CoreApp.buildImageUrl(card.qImage, 'q');
         if(qImgUrl) qHtml += `<img src="${qImgUrl}" class="max-w-full h-auto mt-4 rounded shadow-sm mx-auto max-h-60 object-contain" onerror="this.style.display='none'">`;
         document.getElementById('question-content').innerHTML = qHtml;
 
-        let aHtml = `<p class="text-xl">${card.answer || '...'}</p>`;
+        let aHtml = `<p class="text-xl break-words whitespace-pre-wrap">${card.answer || '...'}</p>`;
         const aImgUrl = CoreApp.buildImageUrl(card.aImage, 'a');
         if(aImgUrl) aHtml += `<img src="${aImgUrl}" class="max-w-full h-auto mt-4 rounded shadow-sm mx-auto max-h-60 object-contain" onerror="this.style.display='none'">`;
         document.getElementById('answer-content').innerHTML = aHtml;
@@ -815,6 +845,77 @@ const CoreApp = {
         
         SessionManager.recordResult(isCorrect);
         CoreApp.startReview();
+    },
+
+    openEditor: () => {
+        if (!APP_STATE.session) return;
+        const s = APP_STATE.session;
+        const cardId = s.cardsQueue[s.currentIndex];
+        const card = CoreApp.csvData.find(c => c.id === cardId);
+        if (!card) return;
+
+        const editor = document.getElementById('card-editor');
+        if (editor) {
+            document.getElementById('card-id').value = card.id;
+            document.getElementById('card-question').value = card.question;
+            document.getElementById('card-answer').value = card.answer;
+            const qImg = document.getElementById('card-question-image');
+            if(qImg) qImg.value = card.qImage || '';
+            const aImg = document.getElementById('card-answer-image');
+            if(aImg) aImg.value = card.aImage || '';
+            
+            editor.classList.remove('hidden');
+            editor.setAttribute('aria-hidden', 'false');
+            document.getElementById('flashcard-container').classList.add('hidden');
+        }
+    },
+
+    closeEditor: () => {
+        document.getElementById('card-editor').classList.add('hidden');
+        document.getElementById('card-editor').setAttribute('aria-hidden', 'true');
+        document.getElementById('flashcard-container').classList.remove('hidden');
+    },
+
+    saveCard: (e) => {
+        e.preventDefault();
+        const id = parseInt(document.getElementById('card-id').value);
+        const card = CoreApp.csvData.find(c => c.id === id);
+        if (card) {
+            card.question = document.getElementById('card-question').value;
+            card.answer = document.getElementById('card-answer').value;
+            const qImg = document.getElementById('card-question-image');
+            if(qImg) card.qImage = qImg.value;
+            const aImg = document.getElementById('card-answer-image');
+            if(aImg) card.aImage = aImg.value;
+            
+            CoreApp.showCardUI(card);
+            CoreApp.renderDeckOverview();
+        }
+        CoreApp.closeEditor();
+    },
+
+    deleteCard: () => {
+        if (!APP_STATE.session) return;
+        const s = APP_STATE.session;
+        const cardId = s.cardsQueue[s.currentIndex];
+        
+        if (confirm('Supprimer cette carte ? (Action locale pour la session)')) {
+            CoreApp.csvData = CoreApp.csvData.filter(c => c.id !== cardId);
+            s.cardsQueue = s.cardsQueue.filter(id => id !== cardId);
+            s.totalCards = s.cardsQueue.length;
+            
+            if (s.currentIndex >= s.totalCards) s.currentIndex = 0;
+            
+            SessionManager.updateCurrent();
+            CoreApp.renderBoxes();
+            CoreApp.renderDeckOverview();
+            
+            if (s.totalCards > 0) CoreApp.startReview();
+            else {
+                CoreApp.closeFlashcard();
+                alert('Session vide.');
+            }
+        }
     }
 };
 

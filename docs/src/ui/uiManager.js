@@ -597,7 +597,7 @@ export class UIManager {
         element.innerHTML = `
             ${thumbnailHtml}
             <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium text-gray-900 truncate">${displayText}</div>
+                <div class="text-sm font-medium text-gray-900 break-words whitespace-pre-wrap">${displayText}</div>
                 <div class="card-next-review text-xs text-gray-500 mt-1">
                     Rev.: ${this.formatTime(card.nextReview || this.app.getCardNextReview(card))}
                 </div>
