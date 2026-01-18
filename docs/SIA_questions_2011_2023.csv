@@ -1,41 +1,41 @@
-question_content,question_content_image,answer_content,answer_content_image,box_number,last_reviewed
-"La norme SIA 108 fait-elle office de loi ?","","Non. La norme SIA 108 n’a pas force de loi, elle s’applique uniquement si elle est contractuellement convenue entre les parties.","","200","01-18-26"
-"Décrivez le contenu de la norme SIA 108.",,"La norme SIA 108 définit le règlement contractuel entre le mandant et l’ingénieur concernant les prestations","les phases","les honoraires et les responsabilités.",,"201","01-18-26"
-"Que signifie le « degré de difficulté » dans la norme SIA 108 ?",,"Le degré de difficulté représente la complexité technique et organisationnelle de l’ouvrage.",,"202","01-18-26"
-"Que signifie le « facteur d’ajustement » dans la norme SIA 108 ?",,"Le facteur d’ajustement tient compte des circonstances particulières du mandat telles que l’organisation","le lieu","le programme ou les contraintes spécifiques.",,"203","01-18-26"
-"La formule de calcul de la SIA 108 détermine-t-elle des heures ou des montants en francs ?",,"La formule de calcul SIA 108 détermine des heures de prestations et non directement des montants en francs.",,"204","01-18-26"
-"Quelles branches du bâtiment sont régies par la norme SIA 108 ?",,"Les installations CVSE : chauffage","ventilation","climatisation","sanitaire et électricité","y compris l’automatisation du bâtiment.",,"205","01-18-26"
-"Citez deux normes SIA applicables à la planification électrique.",,"La norme SIA 108 (Prestations et honoraires) et la norme SIA 118 (Conditions générales pour l’exécution des travaux).",,"206","01-18-26"
-"Citez quatre phases de planification selon la norme SIA 108.",,"Avant-projet ; Projet de l’ouvrage ; Appel d’offres ; Projet d’exécution.",,"207","01-18-26"
-"Le maître d’ouvrage peut-il confirmer oralement une adjudication à l’entrepreneur ?",,"Oui. Une adjudication orale est juridiquement valable selon la norme SIA 118.",,"208","01-18-26"
-"Comment applique-t-on les honoraires pour une répétition d’ouvrage ?",,"Un rabais doit être convenu ou le facteur S de la formule de calcul des honoraires doit être adapté.",,"209","01-18-26"
-"Quel est le délai de paiement général pour une entreprise ?",,"Sauf convention contraire","le délai de paiement est de 30 jours nets à compter de la date de facturation.",,"210","01-18-26"
-"Que signifie l’abréviation SIA ?",,"Société Suisse des Ingénieurs et des Architectes.",,"211","01-18-26"
-"L’honoraire de l’ingénieur est-il un pourcentage fixe du coût de construction ?",,"Non. L’honoraire n’est pas un pourcentage fixe mais est calculé selon une méthode définie dans la norme SIA 108.",,"212","01-18-26"
-"À quoi sert la norme SIA 380/4 ?",,"Elle vise l’utilisation rationnelle de l’électricité dans le bâtiment et fournit un outil d’optimisation de la consommation électrique.",,"213","01-18-26"
-"Que signifie une adjudication à forfait ?",,"Les parties conviennent d’un prix forfaitaire ferme","indépendant des quantités réellement exécutées.",,"214","01-18-26"
-"Citez quatre prestations comprises dans la phase « projet d’exécution ».",,"Calculs définitifs ; Élaboration des plans d’exécution ; Coordination des installations ; Contrôle des plans d’atelier.",,"215","01-18-26"
-"Citez quatre groupes professionnels composant la SIA.",,"Architecture ; Génie civil ; Technique / Industrie ; Environnement (sol","air","eau).",,"216","01-18-26"
-"La coordination interdisciplinaire CVSE est-elle incluse d’office dans le mandat de l’ingénieur électricien ?",,"Non. Elle nécessite un mandat séparé et une rémunération spécifique.",,"217","01-18-26"
-"Citez deux indications que doit contenir le programme des travaux de l’entrepreneur.",,"L’avancement des travaux dans les délais contractuels et les effectifs prévus par phase.",,"218","01-18-26"
-"Un descriptif détaillé est-il nécessaire pour un contrat à forfait ?",,"Oui. Un cahier des charges clair","complet et détaillé est indispensable.",,"219","01-18-26"
-"Qui est responsable de la sécurité des personnes sur le chantier ?",,"Les entrepreneurs et la direction des travaux.",,"220","01-18-26"
-"La technique MCR fait-elle partie d’office du mandat de l’ingénieur électricien ?",,"Non. Un mandat spécifique pour la technique MCR doit être convenu séparément.",,"221","01-18-26"
-"Qu’est-ce que l’hypothèque légale des artisans et entrepreneurs ?",,"Il s’agit d’une garantie légale permettant à l’entrepreneur de sécuriser ses créances sur l’ouvrage.",,"222","01-18-26"
-"Où trouver des exemples de bilans énergétiques de bâtiments ?",,"Dans l’annexe B (partie informative) de la norme SIA 380/4.",,"223","01-18-26"
-"Comment se définit l’indice de dépense d’énergie E ?",,"Il correspond à l’énergie finale annuelle consommée","exprimée en MJ","divisée par la surface de référence énergétique du bâtiment.",,"224","01-18-26"
-"Citez deux conditions précisées par le MO dans un appel d’offres.",,"La date de dépôt de l’offre et la durée de validité de celle-ci.",,"225","01-18-26"
-"Quelles prestations comprend la phase de projet de l’ouvrage ?",,"Définition technique ; Optimisation énergétique ; Coordination interdisciplinaire ; Élaboration du devis et du planning.",,"226","01-18-26"
-"Qu’est-il important de faire à la fin des travaux ?",,"Procéder à la réception vérifiée de l’ouvrage selon un protocole SIA.",,"227","01-18-26"
-"Le contrôle des éléments noyés dans le béton fait-il partie du mandat standard ?",,"Non. Il s’agit d’une prestation spéciale à convenir explicitement.",,"228","01-18-26"
-"Comment différencier les prestations selon le type de bâtiment ?",,"En appliquant le facteur « degré de difficulté » de la norme SIA 108.",,"229","01-18-26"
-"Citez quatre pièces d’un dossier de soumission.",,"Projet de contrat ; Conditions particulières ; Devis descriptif ; Plans.",,"230","01-18-26"
-"Quel est le principal objectif de la SIA 380/4 ?",,"Optimiser et rationaliser la consommation d’électricité dans les bâtiments.",,"231","01-18-26"
-"Quel est le délai de garantie et quand débute-t-il ?",,"Le délai est de deux ans à compter de la réception de l’ouvrage.",,"232","01-18-26"
-"La TVA est-elle incluse dans le montant de l’ouvrage pour le calcul des honoraires ?",,"Non. Le montant de référence est calculé hors TVA.",,"233","01-18-26"
-"Qui publie les catégories A / B / C / D pour les ouvrages publics ?",,"La KBOB(Koordinationskonferenz der Bau- und Liegenschaftsorgane der öffentlichen Bauherren)/(Conférence de coordination des services de la construction et des immeubles des maîtres d’ouvrage publics)",,"234","01-18-26"
-"Quelle est la différence entre un plan de projet et un plan d’exécution ?",,"Le plan de projet définit le concept","tandis que le plan d’exécution permet la réalisation de l’ouvrage.",,"235","01-18-26"
-"Quelle norme permet de calculer la puissance et la consommation électriques d’un bâtiment ?",,"La norme SIA 2024.",,"236","01-18-26"
-"Quels plans fournit l’ingénieur électricien en phase projet ?",,"Les plans d’appareillage sans tracé des lignes ni boîtes de dérivation.",,"237","01-18-26"
-"À quoi servent les fiches techniques par locaux types dans la SIA 2024 ?",,"Elles définissent les valeurs spécifiques de puissance électrique par m² selon le type de local.",,"238","01-18-26"
-"Que traite la norme SIA 451 ?",,"Le transfert et la structuration des données informatiques pour les descriptifs.",,"239","01-18-26"
+﻿question_content,question_content_image,answer_content,answer_content_image,box_number,last_reviewed
+"La norme SIA 108 fait-elle office de loi ?",,"Non. La norme SIA 108 n’a pas force de loi","elle s’applique uniquement si elle est contractuellement convenue entre les parties.",,"1","01-18-26"
+"Décrivez le contenu de la norme SIA 108.",,"La norme SIA 108 définit le règlement contractuel entre le mandant et l’ingénieur concernant les prestations les phases les honoraires et les responsabilités.",,"1","01-18-26"
+"Que signifie le « degré de difficulté » dans la norme SIA 108 ?",,"Le degré de difficulté représente la complexité technique et organisationnelle de l’ouvrage.",,"1","01-18-26"
+"Que signifie le « facteur d’ajustement » dans la norme SIA 108 ?",,"Le facteur d’ajustement tient compte des circonstances particulières du mandat telles que l’organisation le lieu le programme ou les contraintes spécifiques.",,"1","18/01/2026",,
+"La formule de calcul de la SIA 108 détermine-t-elle des heures ou des montants en francs ?",,"La formule de calcul SIA 108 détermine des heures de prestations et non directement des montants en francs.",,"1","01-18-26",,
+"Quelles branches du bâtiment sont régies par la norme SIA 108 ?",,"Les installations CVSE : chauffage","ventilation","climatisation","sanitaire et électricité y compris l’automatisation du bâtiment.",,"1","01-18-26",,
+"Citez deux normes SIA applicables à la planification électrique.",,"La norme SIA 108 (Prestations et honoraires) et la norme SIA 118 (Conditions générales pour l’exécution des travaux).",,"1","01-18-26",,
+"Citez quatre phases de planification selon la norme SIA 108.",,"Avant-projet ; Projet de l’ouvrage ; Appel d’offres ; Projet d’exécution.",,"1","01-18-26",,
+"Le maître d’ouvrage peut-il confirmer oralement une adjudication à l’entrepreneur ?",,"Oui. Une adjudication orale est juridiquement valable selon la norme SIA 118.",,"1","01-18-26",,
+"Comment applique-t-on les honoraires pour une répétition d’ouvrage ?",,"Un rabais doit être convenu ou le facteur S de la formule de calcul des honoraires doit être adapté.",,"1","01-18-26",,
+"Quel est le délai de paiement général pour une entreprise ?",,"Sauf convention contraire dans l’offre ou dans le contrat d’entreprise","le délai de paiement est de 30 jours net","à compter de la date de la facturation.",,"1","18/01/2026",,
+"Que signifie l’abréviation SIA ?",,"Société Suisse des Ingénieurs et des Architectes.",,"1","01-18-26",,
+"L’honoraire de l’ingénieur est-il un pourcentage fixe du coût de construction ?",,"Non. L’honoraire n’est pas un pourcentage fixe mais est calculé selon une méthode définie dans la norme SIA 108.",,"1","01-18-26",,
+"À quoi sert la norme SIA 380/4 ?",,"Elle vise l’utilisation rationnelle de l’électricité dans le bâtiment et fournit un outil d’optimisation de la consommation électrique.",,"1","01-18-26",,
+"Que signifie une adjudication à forfait ?",,"Les parties conviennent d’un prix forfaitaire ferme indépendant des quantités réellement exécutées.",,"1","18/01/2026",,
+"Citez quatre prestations comprises dans la phase « projet d’exécution ».",,"Calculs définitifs ; Élaboration des plans d’exécution ; Coordination des installations ; Contrôle des plans d’atelier.",,"1","01-18-26",,
+"Citez quatre groupes professionnels composant la SIA.",,"Architecture ; Génie civil ; Technique / Industrie ; Environnement (Sol/Air/Eau)",,"1","18/01/2026",,
+"La coordination interdisciplinaire CVSE est-elle incluse d’office dans le mandat de l’ingénieur électricien ?",,"Non. Elle nécessite un mandat séparé et une rémunération spécifique.",,"1","01-18-26",,
+"Citez deux indications que doit contenir le programme des travaux de l’entrepreneur.",,"L’avancement des travaux dans les délais contractuels et les effectifs prévus par phase.",,"1","01-18-26",,
+"Un descriptif détaillé est-il nécessaire pour un contrat à forfait ?",,"Oui. Un cahier des charges clair complet et détaillé est indispensable.",,"1","18/01/2026",,
+"Qui est responsable de la sécurité des personnes sur le chantier ?",,"Les entrepreneurs et la direction des travaux.",,"1","01-18-26",,
+"La technique MCR fait-elle partie d’office du mandat de l’ingénieur électricien ?",,"Non. Un mandat spécifique pour la technique MCR doit être convenu séparément.",,"1","01-18-26",,
+"Qu’est-ce que l’hypothèque légale des artisans et entrepreneurs ?",,"Il s’agit d’une garantie légale permettant à l’entrepreneur de sécuriser ses créances sur l’ouvrage.",,"1","01-18-26",,
+"Où trouver des exemples de bilans énergétiques de bâtiments ?",,"Dans l’annexe B (partie informative) de la norme SIA 380/4.",,"1","01-18-26",,
+"Comment se définit l’indice de dépense d’énergie E ?",,"Il correspond à l’énergie finale annuelle consommée exprimée en MJ divisée par la surface de référence énergétique du bâtiment.",,"1","18/01/2026",,
+"Citez deux conditions précisées par le MO dans un appel d’offres.",,"La date de dépôt de l’offre et la durée de validité de celle-ci.",,"1","01-18-26",,
+"Quelles prestations comprend la phase de projet de l’ouvrage ?",,"Définition technique ; Optimisation énergétique ; Coordination interdisciplinaire ; Élaboration du devis et du planning.",,"1","01-18-26",,
+"Qu’est-il important de faire à la fin des travaux ?",,"Procéder à la réception vérifiée de l’ouvrage selon un protocole SIA.",,"1","01-18-26",,
+"Le contrôle des éléments noyés dans le béton fait-il partie du mandat standard ?",,"Non. Il s’agit d’une prestation spéciale à convenir explicitement.",,"1","01-18-26",,
+"Comment différencier les prestations selon le type de bâtiment ?",,"En appliquant le facteur « degré de difficulté » de la norme SIA 108.",,"1","01-18-26",,
+"Citez quatre pièces d’un dossier de soumission.",,"Projet de contrat ; Conditions particulières ; Devis descriptif ; Plans.",,"1","01-18-26",,
+"Quel est le principal objectif de la SIA 380/4 ?",,"Optimiser et rationaliser la consommation d’électricité dans les bâtiments.",,"1","01-18-26",,
+"Quel est le délai de garantie et quand débute-t-il ?",,"Le délai est de deux ans à compter de la réception de l’ouvrage.",,"1","01-18-26",,
+"La TVA est-elle incluse dans le montant de l’ouvrage pour le calcul des honoraires ?",,"Non. Le montant de référence est calculé hors TVA.",,"1","01-18-26",,
+"Qui publie les catégories A / B / C / D pour les ouvrages publics ?",,"La KBOB(Koordinationskonferenz der Bau- und Liegenschaftsorgane der öffentlichen Bauherren)/(Conférence de coordination des services de la construction et des immeubles des maîtres d’ouvrage publics)",,"1","01-18-26",,
+"Quelle est la différence entre un plan de projet et un plan d’exécution ?",,"Le plan de projet définit le concept tandis que le plan d’exécution permet la réalisation de l’ouvrage.",,"1","18/01/2026",,
+"Quelle norme permet de calculer la puissance et la consommation électriques d’un bâtiment ?",,"La norme SIA 2024.",,"1","01-18-26",,
+"Quels plans fournit l’ingénieur électricien en phase projet ?",,"Les plans d’appareillage sans tracé des lignes ni boîtes de dérivation.",,"1","01-18-26",,
+"À quoi servent les fiches techniques par locaux types dans la SIA 2024 ?",,"Elles définissent les valeurs spécifiques de puissance électrique par m² selon le type de local.",,"1","01-18-26",,
+"Que traite la norme SIA 451 ?",,"Le transfert et la structuration des données informatiques pour les descriptifs.",,"1","01-18-26"

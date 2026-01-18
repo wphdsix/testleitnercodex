@@ -44,12 +44,26 @@ const CardPersistence = {
                 if (typeof state === 'number') card.box = state;
                 else {
                     if (state.box) card.box = state.box;
-                    if (state.lastReview) card.lastReview = state.lastReview;
-                    if (state.difficulty) card.difficulty = state.difficulty;
+                    if (state.lastReview !== undefined) card.lastReview = state.lastReview;
+                    if (state.difficulty !== undefined) card.difficulty = state.difficulty;
                 }
             }
         });
         return csvData;
+    },
+
+    resetDeckState: (filename, cards) => {
+        const allStates = JSON.parse(localStorage.getItem(STORAGE_KEYS.CARD_STATE) || '{}');
+        if (!allStates[filename]) allStates[filename] = {};
+        
+        cards.forEach(card => {
+            card.box = 1;
+            card.lastReview = '';
+            card.difficulty = '';
+            
+            allStates[filename][card.id] = { box: 1, lastReview: '', difficulty: '' };
+        });
+        localStorage.setItem(STORAGE_KEYS.CARD_STATE, JSON.stringify(allStates));
     }
 };
 
@@ -170,7 +184,7 @@ const UI = {
             if (cleanName.includes('_')) {
                 const parts = cleanName.split('_');
                 const category = parts[0];
-                const label = parts.slice(1).join('_');
+                const label = cleanName;
                 if (!groups[category]) groups[category] = [];
                 groups[category].push({ file, label });
             } else {
@@ -486,6 +500,7 @@ const CoreApp = {
                 CoreApp.csvData = data;
                 CoreApp.csvData.filename = filename;
 
+                document.getElementById('reset-deck-btn')?.classList.remove('hidden');
                 CoreApp.renderBoxes();
                 CoreApp.renderDeckOverview(); 
                 StatsUI.renderDifficultyStats();
@@ -523,6 +538,7 @@ const CoreApp = {
         document.getElementById('delete-card-btn')?.addEventListener('click', () => CoreApp.deleteCard());
         document.getElementById('cancel-edit')?.addEventListener('click', () => CoreApp.closeEditor());
         document.getElementById('card-form')?.addEventListener('submit', (e) => CoreApp.saveCard(e));
+        document.getElementById('reset-deck-btn')?.addEventListener('click', () => CoreApp.resetCurrentDeck());
 
         document.querySelectorAll('.modal .close, .flashcard-container, #admin-panel, #github-guide-modal').forEach(el => {
             el.addEventListener('click', (e) => {
@@ -916,6 +932,16 @@ const CoreApp = {
                 alert('Session vide.');
             }
         }
+    },
+
+    resetCurrentDeck: () => {
+        if (!CoreApp.csvData || !CoreApp.csvData.filename) return;
+        if (!confirm("Réinitialiser ce paquet ?\nToutes les cartes retourneront en Boîte 1.")) return;
+        
+        CardPersistence.resetDeckState(CoreApp.csvData.filename, CoreApp.csvData);
+        CoreApp.renderBoxes();
+        CoreApp.renderDeckOverview();
+        alert("Paquet réinitialisé en Boîte 1.");
     }
 };
 
